@@ -1,0 +1,52 @@
+{
+  "_说明": "本文件是卡池/商店/打工/任务/活动的配置样例（开源版）：复制为 gacha-pool.json 后编辑保存，约 5 分钟内自动生效，无需重启或改代码。也可在 config.json 里配置 poolUrl（https 的 Gist raw 链接）实现远程维护。字段缺失时自动使用内置默认。奖励项请替换为你自己的现实奖励。",
+  "shop": [
+    { "id": "jelly", "name": "果冻", "price": 6, "food": 15, "drink": 0, "feel": 0, "energy": 0, "health": 0, "minLv": 1 },
+    { "id": "milktea", "name": "奶茶", "price": 12, "food": 0, "drink": 25, "feel": 5, "energy": 0, "health": 0, "minLv": 1 },
+    { "id": "soda", "name": "气泡水", "price": 8, "food": 0, "drink": 18, "feel": 8, "energy": 0, "health": 0, "minLv": 1 },
+    { "id": "icecream", "name": "冰淇淋", "price": 7, "food": 5, "drink": 0, "feel": 12, "energy": 0, "health": -2, "minLv": 1 },
+    { "id": "eggtart", "name": "蛋挞", "price": 10, "food": 20, "drink": 0, "feel": 5, "energy": 0, "health": 0, "minLv": 1 },
+    { "id": "coffee", "name": "咖啡", "price": 10, "food": 0, "drink": -3, "feel": 0, "energy": 20, "health": 0, "minLv": 2 },
+    { "id": "ramen", "name": "拉面", "price": 18, "food": 40, "drink": -5, "feel": 0, "energy": 0, "health": 0, "minLv": 2 },
+    { "id": "energy", "name": "能量饮料", "price": 15, "food": 0, "drink": 0, "feel": 0, "energy": 30, "health": -5, "minLv": 3 },
+    { "id": "setmeal", "name": "豪华套餐", "price": 30, "food": 50, "drink": 0, "feel": 0, "energy": 10, "health": 0, "minLv": 3 },
+    { "id": "bento", "name": "手作便当", "price": 25, "food": 45, "drink": 0, "feel": 10, "energy": 0, "health": 0, "minLv": 4 }
+  ],
+  "workTypes": {
+    "draw": { "name": "画画", "icon": "🎨", "ms": 45000, "energy": 15, "food": 10, "drink": 8, "base": 8, "perLv": 2, "exp": 6 },
+    "study": { "name": "自习", "icon": "📚", "ms": 90000, "energy": 25, "food": 18, "drink": 12, "base": 10, "perLv": 2, "exp": 15 },
+    "live": { "name": "直播", "icon": "📱", "ms": 120000, "energy": 35, "food": 25, "drink": 20, "base": 20, "perLv": 3, "exp": 10 }
+  },
+  "stdPool": {
+    "S": [
+      { "id": "s_reward1", "name": "心愿大奖券", "desc": "替换为你为她准备的一份大奖励" },
+      { "id": "s_reward2", "name": "约会日券", "desc": "替换为一次你们专属的约会安排" },
+      { "id": "s_reward3", "name": "惊喜盲盒券", "desc": "一份她想要的东西，由你负责准备" }
+    ],
+    "A": [
+      { "id": "a_reward1", "name": "陪玩一晚券", "desc": "陪她玩一晚她喜欢的游戏" },
+      { "id": "a_reward2", "name": "代劳券", "desc": "帮她做一件她不想做的事" },
+      { "id": "a_reward3", "name": "零食投喂券", "desc": "一份她爱吃的零食" },
+      { "id": "a_reward4", "name": "夸夸十分钟", "desc": "当面专心夸她十分钟，不许敷衍" }
+    ],
+    "B": [
+      { "id": "b_hug", "name": "抱抱 ×1", "desc": "一个真诚的拥抱" },
+      { "id": "b_praise", "name": "今日份彩虹屁", "desc": "当面彩虹屁 ×1" },
+      { "id": "b_walk", "name": "散步一程", "desc": "陪她走一段路" }
+    ]
+  },
+  "limBanners": {
+    "2026-09": { "upS": { "id": "l_s1", "name": "节日神秘大礼", "desc": "替换为一份节日礼物" }, "upA": { "id": "l_a1", "name": "温暖小物", "desc": "围巾/挂件/暖手宝，挑一样送她" } },
+    "2026-10": { "upS": { "id": "l_s2", "name": "纪念日活动", "desc": "特殊日子全天由她安排" }, "upA": { "id": "l_a2", "name": "甜品与鲜花", "desc": "一份甜品+一束花" } }
+  },
+  "activities": [
+    { "id": "sample_week", "name": "双倍菲林周", "start": "2026-10-01 00:00", "end": "2026-10-07 23:59", "filMult": 2, "desc": "假期活动示例，菲林双倍！" }
+  ],
+  "dailyTasks": [
+    { "id": "login", "name": "每日签到", "fil": 80, "exp": 6 },
+    { "id": "english", "name": "备考充电·历史/英语/政治", "fil": 60, "exp": 8 },
+    { "id": "feed", "name": "喂食时间", "fil": 40, "exp": 4 },
+    { "id": "chat", "name": "聊聊今天", "fil": 40, "exp": 4 },
+    { "id": "work", "name": "打工赚钱", "fil": 60, "exp": 6 }
+  ]
+}
