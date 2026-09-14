@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>蕾米埃尔·分身</title>
+  <style>
+    /* 分身页：点击可直接对话（复用主进程 pet:chat 链路）。
+       直接引用雪碧图（file:// 同目录，无跨源问题），UI 风格与主宠物一致 */
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; margin: 0;
+      user-select: none; }
+    body { animation: clone-fade-in 0.6s ease both; }
+    /* 透明窗口上 transition+初始 opacity:0 会卡死在透明（黑屏根源），keyframes 每帧主动计算且最终态恒为 1 */
+    @keyframes clone-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    #c {
+      position: absolute; left: 50%; bottom: 6px;
+      width: 154px; height: 167px;
+      transform: translateX(-50%);
+      background-image: url('assets/spritesheet.webp');
+      background-repeat: no-repeat;
+      cursor: pointer;
+    }
+    /* 回复气泡：模型上方，ZZZ 深底粉边 */
+    #cc-bubble {
+      position: absolute; left: 4px; right: 4px; bottom: 178px;
+      max-height: 86px; overflow: hidden;
+      padding: 6px 8px;
+      background: rgba(14, 10, 20, 0.95);
+      border: 1px solid #ff86b8;
+      border-radius: 8px;
+      color: #ffe3f0; font: 12px/1.45 "Microsoft YaHei", sans-serif;
+      white-space: pre-wrap; word-break: break-all;
+      display: none;
+    }
+    /* 迷你输入条：与气泡同位互斥 */
+    #cc-bar {
+      position: absolute; left: 4px; right: 4px; bottom: 178px;
+      display: none;
+    }
+    #cc-input {
+      width: 100%; box-sizing: border-box;
+      padding: 6px 8px;
+      background: rgba(14, 10, 20, 0.95);
+      border: 1px solid #ff86b8; border-radius: 8px; outline: none;
+      color: #ffe3f0; font: 12px "Microsoft YaHei", sans-serif;
+    }
+    #cc-input::placeholder { color: rgba(255, 131, 184, 0.55); }
+    .show { display: block !important; }
+  </style>
+</head>
+<body>
+  <div id="cc-bubble"></div>
+  <div id="cc-bar"><input id="cc-input" type="text" maxlength="120" autocomplete="off" placeholder="和蕾米说点什么…（Enter 发送）"></div>
+  <div id="c"></div>
+  <script>
+    // 待机(行0,7帧)循环，hover 挥手(行3,4帧)；点击弹输入条直接对话
+    const CELL_W = 192, CELL_H = 208, SCALE = 154 / 192;
+    const el = document.getElementById('c');
+    const bubble = document.getElementById('cc-bubble');
+    const bar = document.getElementById('cc-bar');
+    const input = document.getElementById('cc-input');
+    el.style.backgroundSize = (1536 * SCALE) + 'px ' + (2288 * SCALE) + 'px';
+
+    let col = 0, row = 0, step = 0, mode = 'idle';
+    let waveUntil = 0, lastWaveAt = 0;
+    let busy = false, interacted = false;
+    let typeTimer = null;
+
+    function draw() {
+      el.style.backgroundPosition = (-col * CELL_W * SCALE) + 'px ' + (-row * CELL_H * SCALE) + 'px';
+    }
+    draw();
+    setInterval(() => {
+      if (mode === 'wave') { // 挥手中：播满 4 帧 x2 遍回待机
+        step++;
+        col = step % 4;
+        if (step >= 8) { mode = 'idle'; col = 0; step = 0; }
+      } else {
+        col = (col + 1) % 7; // 待机循环
+        if (step++ % 40 === 0) { mode = 'wave'; col = 0; step = 0; } // 每 6 秒主动挥一次
+      }
+      draw();
+    }, 150);
+
+    function showBubble(text) {
+      clearInterval(typeTimer);
+      bar.classList.remove('show');
+      bubble.textContent = text;
+      bubble.classList.add('show');
+    }
+    // 打字机逐字显示 AI 回复
+    function showBubbleTyped(text) {
+      clearInterval(typeTimer);
+      bar.classList.remove('show');
+      bubble.textContent = '';
+      bubble.classList.add('show');
+      let i = 0;
+      typeTimer = setInterval(() => {
+        i++;
+        bubble.textContent = text.slice(0, i);
+        if (i >= text.length) clearInterval(typeTimer);
+      }, 30);
+    }
+
+    function openBar() {
+      if (busy) return;
+      interacted = true;
+      bubble.classList.remove('show');
+      bar.classList.add('show');
+      input.focus();
+    }
+    function closeBar() {
+      bar.classList.remove('show');
+      input.blur();
+    }
+
+    el.addEventListener('click', openBar);
+    el.addEventListener('mouseenter', () => { // hover 挥手，冷却 8s
+      if (mode === 'wave' || Date.now() - lastWaveAt < 8000) return;
+      lastWaveAt = Date.now();
+      mode = 'wave'; col = 0; step = 0; draw();
+    });
+
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Escape') { closeBar(); return; }
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const t = input.value.trim();
+      if (!t) { closeBar(); return; } // 空输入 = 收起
+      if (busy) return;
+      busy = true;
+      input.value = '';
+      window.pet.cloneActivity(); // 互动续命 60s
+      showBubble('…');
+      const res = await window.pet.chat(t);
+      busy = false;
+      if (res.error) showBubble('（通讯中断了…共犯稍后再找我）');
+      else showBubbleTyped(res.reply);
+    });
+    input.addEventListener('blur', () => {
+      setTimeout(() => { if (document.activeElement !== input) closeBar(); }, 180);
+    });
+
+    // 透明区域放行点击给桌面（只有模型和开着的输入条算自己人）
+    document.addEventListener('mousemove', (e) => {
+      const over = !!(e.target && e.target.closest && e.target.closest('#c, #cc-bar.show'));
+      window.pet.setIgnoreMouse(!over);
+    });
+
+    // 入场浮现（CSS transition 淡入）；从未互动过则 12s 自行淡出（主进程 15s 关窗兜底）
+    // 互动过就交给主进程续命管理，收到 pet:clone-fade 才淡出
+    // 注意：rAF 在隐藏窗口里不跑（曾致 opacity 永远 0 全体隐形），这里直接设值靠 transition 过渡
+    // 入场淡入由 CSS keyframes 负责（animation both 恒定终态，不再依赖 JS/transition）
+    // 淡出必须先移除 animation（其填充会覆盖内联 opacity）
+    const bg = new Image();
+    bg.onload = () => console.log('[clone-page] spritesheet loaded', bg.naturalWidth);
+    bg.onerror = () => console.error('[clone-page] spritesheet FAILED');
+    bg.src = 'assets/spritesheet.webp';
+    const fadeOut = () => { document.body.style.animation = 'none'; document.body.style.opacity = '0'; };
+    window.pet.onCloneFade(fadeOut);
+    const HOLD = new URLSearchParams(location.search).has('hold'); // 联调模式长驻留
+    setTimeout(() => {
+      if (!interacted && !HOLD) fadeOut();
+    }, 12000);
+  </script>
+</body>
+</html>
