@@ -1,0 +1,46 @@
+{
+  "name": "remielle-desktop-pet",
+  "version": "2.4.0",
+  "description": "绝区零蕾米埃尔（小蕾米）Q版桌面宠物 · 官方衍生素材版",
+  "author": "remielle-pet project",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "get-electron": "node node_modules/electron/install.js",
+    "icon": "electron scripts/export-icon.js",
+    "dist": "electron-builder --win portable"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "zzz.remielle.pet",
+    "productName": "RemiellePet",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "resources/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "RemiellePet-${version}-portable.exe"
+    }
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4"
+  }
+}
