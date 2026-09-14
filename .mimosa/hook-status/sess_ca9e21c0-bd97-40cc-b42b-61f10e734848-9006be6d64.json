@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "mimosa-hook-status/v1",
+  "recordedAt": "2026-09-14T00:30:40.680Z",
+  "sessionId": "sess_ca9e21c0-bd97-40cc-b42b-61f10e734848",
+  "event": "PreToolUse",
+  "toolName": "Write",
+  "file": "D:\\codex\\tools\\gh-upload-opensource.js",
+  "outcome": "blocked",
+  "coverage": "complete",
+  "findingCount": 1,
+  "durationMs": 675,
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "PreToolUse",
+    "outcome": "complete",
+    "latencyMs": 675,
+    "peakMemoryBytes": 130965504,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 1,
+    "cache": {
+      "hits": 0,
+      "misses": 1,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 1,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "hostState": "hook_complete_waiting_host_tool_decision",
+  "reportHint": ".mimosa/reports/"
+}
