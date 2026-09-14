@@ -1,0 +1,69 @@
+{
+  "petId": "xiaolemi",
+  "displayName": "小蕾米",
+  "format": "PNG",
+  "size": {
+    "width": 192,
+    "height": 208
+  },
+  "transparentBackground": true,
+  "previews": [
+    {
+      "file": "01-待机-idle.png",
+      "state": "idle",
+      "row": 0,
+      "sourceFrame": "00"
+    },
+    {
+      "file": "02-向右移动-running-right.png",
+      "state": "running-right",
+      "row": 1,
+      "sourceFrame": "03"
+    },
+    {
+      "file": "03-向左移动-running-left.png",
+      "state": "running-left",
+      "row": 2,
+      "sourceFrame": "03"
+    },
+    {
+      "file": "04-挥手-waving.png",
+      "state": "waving",
+      "row": 3,
+      "sourceFrame": "02"
+    },
+    {
+      "file": "05-完成庆祝-smug.png",
+      "state": "jumping",
+      "semantic": "success-celebration",
+      "row": 4,
+      "sourceFrame": "02"
+    },
+    {
+      "file": "06-失败-failed.png",
+      "state": "failed",
+      "row": 5,
+      "sourceFrame": "04"
+    },
+    {
+      "file": "07-等待确认-waiting.png",
+      "state": "waiting",
+      "row": 6,
+      "sourceFrame": "02"
+    },
+    {
+      "file": "08-工作中-draw-continuous.png",
+      "state": "running",
+      "semantic": "active-drawing",
+      "row": 7,
+      "sourceFrame": "03"
+    },
+    {
+      "file": "09-检查中-think.png",
+      "state": "review",
+      "semantic": "focused-thinking",
+      "row": 8,
+      "sourceFrame": "02"
+    }
+  ]
+}
