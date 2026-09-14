@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>蕾米埃尔</title>
+  <link rel="stylesheet" href="pet.css">
+</head>
+<body class="state-appear">
+  <!-- UI 层：气泡与输入条（不随模型 zoom 缩放，字号独立可调） -->
+  <div id="ui-layer">
+    <div id="bubble" class="hidden"></div>
+    <div id="chat-bar"><input id="chat-input" type="text" maxlength="120" autocomplete="off"><span class="bar-close" id="chat-close">✕</span></div>
+    <div id="size-bar">
+      <span class="size-label">尺寸</span>
+      <input id="size-range" type="range" min="0.5" max="2" step="0.05" value="1">
+      <span id="size-value">1.00x</span>
+      <span class="bar-close" id="size-close">✕</span>
+    </div>
+    <div id="font-bar">
+      <span class="size-label">字号</span>
+      <input id="font-range" type="range" min="12" max="20" step="1" value="14">
+      <span id="font-value">14px</span>
+      <span class="bar-close" id="font-close">✕</span>
+    </div>
+  </div>
+  <!-- 模型层：固定 340x420 基础尺寸，由 zoom 负责整体缩放 -->
+  <div id="stage"><div id="pet-wrap"><!-- sprite.js 注入雪碧图精灵 --></div></div>
+  <script src="sprite.js"></script>
+  <script src="pet.js"></script>
+</body>
+</html>
