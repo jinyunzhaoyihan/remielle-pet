@@ -1,0 +1,1270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>蕾米 · 通讯</title>
+  <style>
+    /* ===== 蕾米聊天窗：NextChat 设计语言 × ZZZ 粉深色主题（原生实现，零依赖） =====
+       圆润=大圆角/胶囊/柔光；流畅=回弹入场/三点跳动/微交互/平滑滚动 */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+    body {
+      font-family: "Microsoft YaHei", sans-serif;
+      animation: win-in 0.3s ease-out; /* 窗口入场：淡入+上浮 */
+    }
+    @keyframes win-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+    /* 圆角主容器（窗口本身透明，圆润靠 CSS） */
+    #app {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      background: radial-gradient(120% 90% at 20% 0%, #241631 0%, #15101b 55%, #120d18 100%);
+      border: 1px solid rgba(255, 134, 184, 0.35);
+      border-radius: 14px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 22px rgba(255, 126, 184, 0.12);
+      overflow: hidden;
+    }
+
+    /* ===== 顶栏：可拖动 ===== */
+    #top {
+      flex: none; height: 52px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 10px 0 16px;
+      background: rgba(255, 134, 184, 0.06);
+      border-bottom: 1px solid rgba(255, 134, 184, 0.18);
+      -webkit-app-region: drag;
+    }
+    #title { color: #ff9ec7; font-size: 13px; font-weight: bold; letter-spacing: 0.5px; white-space: nowrap; }
+    /* 胶囊分段切换（陪聊/查攻略/养成/推送） */
+    #seg {
+      flex: 1; display: flex; justify-content: flex-end;
+      -webkit-app-region: no-drag;
+    }
+    #seg-inner {
+      display: flex; gap: 2px; padding: 3px;
+      background: rgba(255, 134, 184, 0.1);
+      border: 1px solid rgba(255, 134, 184, 0.25);
+      border-radius: 999px;
+    }
+    .seg-btn {
+      padding: 4px 8px; border-radius: 999px; border: none; outline: none;
+      background: transparent; color: rgba(255, 227, 240, 0.65);
+      font: 11px "Microsoft YaHei", sans-serif; cursor: pointer;
+      transition: background 0.18s ease, color 0.18s ease;
+    }
+    #qr-btn {
+      width: 26px; height: 26px; border-radius: 8px; border: 1px solid rgba(255,134,184,0.35);
+      background: rgba(255,255,255,0.05); font-size: 13px; cursor: pointer; line-height: 1;
+      -webkit-app-region: no-drag;
+    }
+    #qr-pop { position: absolute; top: 46px; right: 8px; z-index: 30; width: 240px; padding: 14px;
+      background: rgba(14,10,20,0.97); border: 1px solid #ff86b8; border-radius: 14px; display: none; text-align: center; }
+    #qr-pop.show { display: block; }
+    #qr-pop img { width: 190px; height: 190px; border-radius: 8px; }
+    #qr-pop .hint { font-size: 10px; color: rgba(255,227,240,0.7); margin-top: 8px; line-height: 1.6; }
+    #qr-pop .url { font-size: 10px; color: #7dff8a; word-break: break-all; margin-top: 6px; user-select: text; }
+    .seg-btn:hover { color: #ffe3f0; }
+    .seg-btn.on {
+      background: linear-gradient(135deg, #ff86b8, #ff9ec7);
+      color: #3a1226; font-weight: bold;
+      box-shadow: 0 2px 8px rgba(255, 126, 184, 0.4);
+    }
+    /* 圆形关闭钮 */
+    #close {
+      flex: none; width: 26px; height: 26px; border-radius: 50%;
+      border: 1px solid rgba(255, 134, 184, 0.4);
+      background: rgba(14, 10, 20, 0.6); color: #ff9ec7;
+      font-size: 13px; line-height: 1; cursor: pointer;
+      -webkit-app-region: no-drag;
+      transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+    }
+    #close:hover { background: #ff86b8; color: #fff; transform: scale(1.1); }
+
+    /* ===== 消息流（陪聊/攻略共用样式；推送为卡片列表） ===== */
+    #flow, #guide-flow {
+      flex: 1; overflow-y: auto; padding: 14px 14px 6px;
+      display: flex; flex-direction: column; gap: 10px;
+      scroll-behavior: smooth;
+    }
+    #flow::-webkit-scrollbar, #guide-flow::-webkit-scrollbar { width: 6px; }
+    #flow::-webkit-scrollbar-thumb, #guide-flow::-webkit-scrollbar-thumb { background: rgba(255, 134, 184, 0.3); border-radius: 3px; }
+    #flow::-webkit-scrollbar-thumb:hover, #guide-flow::-webkit-scrollbar-thumb:hover { background: rgba(255, 134, 184, 0.55); }
+    #guide-flow { display: none; }
+
+    /* ===== 推送流：独立界面，新闻卡片列表 ===== */
+    #push-flow { flex: 1; overflow-y: auto; padding: 12px 12px 6px; display: none; flex-direction: column; gap: 8px; }
+    #push-flow::-webkit-scrollbar { width: 6px; }
+    #push-flow::-webkit-scrollbar-thumb { background: rgba(255, 134, 184, 0.3); border-radius: 3px; }
+    .push-card {
+      padding: 9px 12px; border-radius: 12px;
+      background: rgba(255, 134, 184, 0.07);
+      border: 1px solid rgba(255, 134, 184, 0.22);
+      animation: msg-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .push-card .pt { font-size: 12px; font-weight: bold; color: #ff9ec7; margin-bottom: 4px; white-space: pre-wrap; word-break: break-word; }
+    .push-card .pb { font-size: 11px; line-height: 1.55; color: rgba(255, 227, 240, 0.8); white-space: pre-wrap; word-break: break-word; }
+    .push-card .ptime { margin-top: 5px; font-size: 9px; color: rgba(255, 227, 240, 0.55); text-align: right; }
+    .push-empty { text-align: center; color: rgba(255, 227, 240, 0.55); font-size: 12px; padding: 30px 0; }
+
+    .msg { display: flex; gap: 8px; max-width: 100%; animation: msg-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes msg-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
+    .msg.user { flex-direction: row-reverse; }
+
+    /* 雪碧图大头像（行9 特写帧），圆形裁切 */
+    .ava {
+      flex: none; width: 30px; height: 30px; border-radius: 50%;
+      background-image: url('assets/spritesheet.webp');
+      background-size: 240px 357.5px; background-position: 0 -292.5px;
+      border: 1.5px solid rgba(255, 134, 184, 0.6);
+      margin-top: 2px;
+    }
+    .msg.user .ava { visibility: hidden; } /* 用户侧占位对齐，不显示头像 */
+
+    .bubble {
+      padding: 8px 12px; border-radius: 14px;
+      font-size: 13px; line-height: 1.55; color: #ffe3f0;
+      background: rgba(255, 134, 184, 0.1);
+      border: 1px solid rgba(255, 134, 184, 0.28);
+      border-bottom-left-radius: 5px;  /* 蕾米左下收小：聊天软件惯例 */
+      white-space: pre-wrap; word-break: break-word;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+      user-select: text; max-width: 250px;
+    }
+    .msg.user .bubble {
+      background: linear-gradient(135deg, #ff86b8, #ff9ec7);
+      border: none; color: #3a1226;
+      border-bottom-left-radius: 14px; border-bottom-right-radius: 5px;
+      box-shadow: 0 2px 12px rgba(255, 126, 184, 0.35);
+    }
+    .src { display: block; margin-top: 5px; font-size: 10px; color: rgba(255, 158, 199, 0.7); }
+
+    /* 深度思考折叠块（reasoner 的 reasoning_content） */
+    .think-box { margin-bottom: 6px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,134,184,0.15); overflow: hidden; }
+    .think-head { padding: 4px 8px; font-size: 10px; color: rgba(255,158,199,0.75); cursor: pointer; user-select: none; }
+    .think-body { display: none; padding: 2px 8px 6px; font-size: 10px; line-height: 1.5; color: rgba(255,227,240,0.65); white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; }
+    .think-box.open .think-body { display: block; }
+    .think-box.live .think-body { display: block; }
+
+    /* 等待回复：三点跳动 */
+    .typing { display: flex; gap: 4px; align-items: center; padding: 11px 14px; }
+    .typing i {
+      width: 6px; height: 6px; border-radius: 50%; background: #ff9ec7;
+      animation: bounce 1.2s infinite ease-in-out;
+    }
+    .typing i:nth-child(2) { animation-delay: 0.15s; }
+    .typing i:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-5px); opacity: 1; } }
+
+    /* ===== 输入区 ===== */
+    #foot {
+      flex: none; display: flex; gap: 8px; align-items: center;
+      padding: 10px 12px 12px;
+      border-top: 1px solid rgba(255, 134, 184, 0.18);
+      background: rgba(255, 134, 184, 0.04);
+    }
+    #inp {
+      flex: 1; height: 36px; padding: 0 16px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 134, 184, 0.35);
+      border-radius: 999px; outline: none;
+      color: #fff; font: 13px "Microsoft YaHei", sans-serif;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    #inp::placeholder { color: rgba(255, 227, 240, 0.55); }
+    #inp:focus { border-color: #ff86b8; box-shadow: 0 0 0 3px rgba(255, 134, 184, 0.15); }
+    .ai-toggle {
+      flex: none; width: 30px; height: 30px; border-radius: 50%; font-size: 13px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,134,184,0.3);
+      cursor: pointer; line-height: 1; transition: all 0.15s ease;
+    }
+    .ai-toggle.on {
+      background: linear-gradient(135deg,#ff86b8,#ff9ec7); border-color: transparent;
+      box-shadow: 0 0 10px rgba(255,126,184,0.5);
+    }
+    .ai-toggle:disabled { opacity: 0.4; cursor: default; }
+    #send {
+      flex: none; width: 36px; height: 36px; border-radius: 50%; border: none;
+      background: linear-gradient(135deg, #ff86b8, #ff9ec7);
+      color: #3a1226; font-size: 15px; cursor: pointer;
+      box-shadow: 0 2px 10px rgba(255, 126, 184, 0.4);
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, opacity 0.15s;
+    }
+    #send:hover { transform: scale(1.1); box-shadow: 0 4px 16px rgba(255, 126, 184, 0.55); }
+    #send:active { transform: scale(0.95); }
+    #send:disabled { opacity: 0.45; cursor: default; transform: none; }
+
+    /* ===== 养成页 ===== */
+    #nurture { flex: 1; overflow-y: auto; padding: 12px 14px; display: none; }
+    #nurture.show { display: block; }
+    #nurture::-webkit-scrollbar { width: 6px; }
+    #nurture::-webkit-scrollbar-thumb { background: rgba(255,134,184,0.3); border-radius: 3px; }
+    .n-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .n-level { color: #ff9ec7; font-weight: bold; font-size: 14px; white-space: nowrap; }
+    .n-title { color: #ffd76e; font-size: 12px; white-space: nowrap; } /* 称号此前无规则=黑字落深底，对比度实锤修复 */
+    .n-money { color: #ffd76e; font-size: 13px; white-space: nowrap; margin-left: auto; }
+    .n-money b, .g-wallet b { font-variant-numeric: tabular-nums; } /* 钱包滚动数字不抖动 */
+    .n-expbar { flex: 1; height: 8px; background: rgba(255,134,184,0.12); border-radius: 4px; overflow: hidden; }
+    .n-expbar i { display: block; height: 100%; background: linear-gradient(90deg,#c86bff,#ff86b8); border-radius: 4px; transition: width 0.5s ease; }
+    /* 状态条：可交互（P0-1）——hover/click 浮出建议卡；低值时内联直达按钮 */
+    .stat { margin-bottom: 8px; position: relative; cursor: pointer; }
+    .stat .lab { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,227,240,0.7); margin-bottom: 3px; }
+    .stat .lab .warn { color: #ff8a8a; font-weight: bold; }
+    .stat-act { flex: none; padding: 1px 8px; font-size: 10px; border-radius: 999px; cursor: pointer;
+      background: rgba(255,255,255,0.08); color: #ffe3f0; border: 1px solid rgba(255,134,184,0.4); }
+    .stat-act:hover { background: rgba(255,134,184,0.25); }
+    #stat-pop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 12; padding: 9px 11px;
+      background: rgba(14,10,20,0.97); border: 1px solid #ff86b8; border-radius: 12px; font-size: 11px; line-height: 1.6; color: #ffe3f0; }
+    #stat-pop .sp-t { font-weight: bold; color: #ff9ec7; margin-bottom: 2px; }
+    #stat-pop .sp-est { color: rgba(255,227,240,0.62); margin-bottom: 6px; }
+    #stat-pop .sp-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+    #stat-pop .sp-acts .buy { padding: 3px 12px; font-size: 11px; }
+    #stat-pop .sp-tip { color: rgba(255,227,240,0.62); }
+    /* 心情表情芯片（P2-1）：与进度条视觉区隔，扫视时立刻分辨出"这条是心情" */
+    .mood-chip { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px;
+      background: rgba(255,90,210,0.08); border: 1px solid rgba(255,90,210,0.28); }
+    .mood-chip.low { animation: pulse 1s infinite; border-color: rgba(255,77,77,0.5); }
+    .mood-chip .mc-icon { font-size: 20px; line-height: 1; }
+    .mood-chip .mc-word { flex: 1; font-size: 11px; color: #ffe3f0; }
+    .mood-chip .mc-val { font-size: 12px; color: rgba(255,227,240,0.7); font-variant-numeric: tabular-nums; }
+    .mood-chip .mc-val small { font-size: 9px; color: rgba(255,227,240,0.45); }
+    /* 副本印章式关卡转场（P2-2）：关卡切换时"第 N 关"盖章入场，第 5 关金色 BOSS 印 */
+    .dungeon-stamp { display: inline-block; padding: 5px 18px; margin-bottom: 12px; font-size: 19px; font-weight: bold;
+      color: #ff8a8a; border: 2px solid #ff8a8a; border-radius: 8px; transform: rotate(-3deg);
+      animation: stamp-in .45s cubic-bezier(0.34,1.56,0.64,1); letter-spacing: 3px; }
+    .dungeon-stamp.boss { color: #ffd76e; border-color: #ffd76e; text-shadow: 0 0 12px rgba(255,215,110,0.65); }
+    @keyframes stamp-in { 0% { opacity: 0; transform: scale(2.4) rotate(-14deg); }
+      60% { opacity: 1; transform: scale(0.92) rotate(1deg); } 100% { opacity: 1; transform: scale(1) rotate(-3deg); } }
+    .dungeon-body { animation: msg-in 0.3s ease; }
+    .bar { height: 10px; background: rgba(255,134,184,0.12); border-radius: 5px; overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 5px; transition: width 0.6s cubic-bezier(0.34,1.2,0.64,1); }
+    .bar.food i { background: linear-gradient(90deg,#ff9a5a,#ffb88a); }
+    .bar.drink i { background: linear-gradient(90deg,#5ac8ff,#8ad8ff); }
+    .bar.feel i { background: linear-gradient(90deg,#ff5ad2,#ff9ade); }
+    .bar.energy i { background: linear-gradient(90deg,#7dff8a,#b8ffbf); }
+    .bar i.low { background: linear-gradient(90deg,#ff4d4d,#ff8a8a); animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity: 0.55; } }
+    .n-sec { margin: 12px 0 6px; font-size: 12px; color: #ff9ec7; font-weight: bold; }
+    .shop-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin-bottom: 6px;
+      background: rgba(255,134,184,0.07); border: 1px solid rgba(255,134,184,0.2); border-radius: 10px; }
+    .shop-item .nm { font-size: 13px; color: #ffe3f0; white-space: nowrap; }
+    .shop-item .fx { flex: 1; font-size: 10px; color: rgba(255,227,240,0.62); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .buy { flex: none; padding: 3px 12px; border-radius: 999px; border: none; cursor: pointer;
+      background: linear-gradient(135deg,#ff86b8,#ff9ec7); color: #3a1226; font-weight: bold; font-size: 12px;
+      transition: transform 0.15s; }
+    .buy:hover:not(:disabled) { transform: scale(1.08); }
+    .buy:disabled { opacity: 0.4; cursor: default; }
+    #work-btn { width: 100%; margin-top: 8px; padding: 10px; border-radius: 12px; border: none; cursor: pointer;
+      background: linear-gradient(135deg,#c86bff,#ff86b8); color: #fff; font-size: 14px; font-weight: bold;
+      transition: transform 0.15s; }
+    #work-btn:hover:not(:disabled) { transform: scale(1.02); }
+    #work-btn:disabled { opacity: 0.5; }
+    #work-prog { height: 8px; background: rgba(255,134,184,0.12); border-radius: 4px; margin-top: 8px; overflow: hidden; display: none; }
+    #work-prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg,#c86bff,#ff86b8); }
+    #nur-toast { position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%);
+      padding: 8px 18px; background: rgba(14,10,20,0.95); border: 1px solid #ff86b8; border-radius: 999px;
+      color: #ffe3f0; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 9; }
+    /* 实锤修复：此前缺 .show 规则，所有 toast 恒透明不可见（喂食/徽章详情/副本提示全没显示过） */
+    #nur-toast.show { opacity: 1; }
+    .reward-card .buy.later { background: rgba(255,255,255,0.1); color: rgba(255,227,240,0.6); }
+    /* ===== 调频抽卡 / 任务系统 ===== */
+    .g-pools { display: flex; gap: 8px; margin-bottom: 8px; }
+    .g-pool { flex: 1; padding: 8px 9px; border-radius: 10px; background: rgba(255,134,184,0.07); border: 1px solid rgba(255,134,184,0.25); }
+    .g-pool.lim { border-color: rgba(255, 215, 110, 0.5); background: rgba(255, 215, 110, 0.06); }
+    .g-pool .gp-name { font-size: 11px; font-weight: bold; color: #ff9ec7; margin-bottom: 2px; }
+    .g-pool.lim .gp-name { color: #ffd76e; }
+    .g-pool .gp-up { font-size: 10px; color: #ffe3f0; margin-bottom: 2px; }
+    .g-pool .gp-pity { font-size: 9px; color: rgba(255,227,240,0.6); margin-bottom: 5px; }
+    .g-btns { display: flex; gap: 4px; }
+    .g-btn { flex: 1; padding: 4px 2px; border-radius: 8px; border: none; cursor: pointer; font-size: 10px; font-weight: bold;
+      background: linear-gradient(135deg,#ff86b8,#ff9ec7); color: #3a1226; transition: transform 0.15s; }
+    .g-btn:hover:not(:disabled) { transform: scale(1.05); }
+    .g-btn:disabled { opacity: 0.4; cursor: default; }
+    .g-btn.alt { background: rgba(255,255,255,0.1); color: #ffe3f0; }
+    .g-wallet { display: flex; gap: 8px; font-size: 11px; color: #ffd76e; margin: 8px 0; flex-wrap: wrap; }
+    .g-wallet span { background: rgba(255,215,110,0.08); border: 1px solid rgba(255,215,110,0.25); border-radius: 999px; padding: 2px 10px; }
+    .task { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 5px; border-radius: 8px;
+      background: rgba(255,134,184,0.06); font-size: 12px; color: #ffe3f0; position: relative; }
+    .task.done { opacity: 0.5; }
+    .task .tk-name { flex: 1; }
+    .task .tk-st { font-size: 10px; color: #7dff8a; }
+    /* 任务完成浮字（P0-2）：任务行右下 +90 菲林 · +8 exp，1.5s 淡出上浮 */
+    .task-reward-float { position: absolute; right: 8px; top: 50%; margin-top: -9px; pointer-events: none; z-index: 5;
+      font-weight: 600; font-size: 11px; color: #ffd76e; text-shadow: 0 0 6px rgba(255,215,110,0.6); white-space: nowrap;
+      animation: floatUp 1.5s ease-out forwards; }
+    @keyframes floatUp { 0% { opacity: 0; transform: translateY(4px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
+    .task-all-done { padding: 8px 10px; margin-bottom: 8px; border-radius: 10px; text-align: center; font-size: 12px; color: #ffd76e;
+      background: linear-gradient(135deg, rgba(255,215,110,0.16), rgba(255,134,184,0.10));
+      border: 1px solid rgba(255,215,110,0.5); animation: msg-in 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+    .quiz-opts button { display: block; width: 100%; text-align: left; margin-bottom: 6px; padding: 8px 12px;
+      border-radius: 10px; border: 1px solid rgba(255,134,184,0.35); background: rgba(255,255,255,0.04);
+      color: #ffe3f0; font-size: 12px; cursor: pointer; }
+    .quiz-opts button:hover { border-color: #ff86b8; background: rgba(255,134,184,0.12); }
+    .quiz-opts button.sel { border-color: #ffd76e; background: rgba(255,215,110,0.15); }
+    .quiz-opts button:disabled { cursor: default; }
+    /* 阅读日整篇文章框 + 答后解析卡（v2.3.0 一次作答学习闭环） */
+    .quiz-passage { font-size: 11px; line-height: 1.7; color: #ffe3f0; background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,134,184,0.25); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px;
+      max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+    .quiz-ex { font-size: 11px; line-height: 1.7; color: rgba(255,227,240,0.72);
+      background: rgba(90,200,255,0.07); border: 1px solid rgba(90,200,255,0.3); border-radius: 10px;
+      padding: 8px 10px; margin-bottom: 8px; }
+    .disclosure { font-size: 10px; color: rgba(255,227,240,0.62); margin-top: 10px; }
+    .disclosure summary { cursor: pointer; color: rgba(255,158,199,0.65); }
+    .disclosure div { margin-top: 6px; line-height: 1.7; color: rgba(255,227,240,0.62); }
+    /* 抽卡记录第一条高亮（P0-3）：本次出货一眼锚定 */
+    .rec-first { color: #ffd76e; background: rgba(255,215,110,0.1); border-radius: 4px; padding: 1px 5px; }
+    .intro-card { padding: 10px 12px; border-radius: 10px; background: rgba(255,215,110,0.07); border: 1px solid rgba(255,215,110,0.35); font-size: 11px; line-height: 1.7; color: #ffe3f0; margin-bottom: 10px; }
+    .intro-card button { margin-top: 6px; }
+    .activity-banner { padding: 7px 10px; margin-bottom: 8px; border-radius: 10px; font-size: 11px; line-height: 1.5;
+      color: #ffd76e; background: rgba(255, 215, 110, 0.08); border: 1px dashed rgba(255, 215, 110, 0.5); animation: pulse 2s infinite; }
+    /* ===== 抽卡结果弹层 + 调频动画（ZZZ 调频主题，参考 canvas-confetti/GSAP 卡片揭示效果，原生实现） ===== */
+    #g-overlay { position: absolute; inset: 0; background: rgba(10,7,15,0.92); display: none; z-index: 20; }
+    #g-overlay.show { display: block; }
+    #g-stage { position: relative; padding: 30px 14px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+    #g-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    /* 调频阶段：频率刻度滚动 + 扫描线 */
+    .g-tuning { text-align: center; padding: 60px 0; color: #ff9ec7; }
+    .g-tuning .freq { font-size: 30px; font-weight: bold; letter-spacing: 4px; color: #ffd76e; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(255,215,110,0.6); }
+    .g-tuning .t-text { margin-top: 12px; font-size: 12px; color: rgba(255,227,240,0.7); animation: pulse 0.8s infinite; }
+    .g-scan { position: relative; height: 3px; margin: 18px 30px 0; background: rgba(255,134,184,0.15); border-radius: 2px; overflow: hidden; }
+    .g-scan i { position: absolute; top: 0; left: -30%; width: 30%; height: 100%; background: linear-gradient(90deg, transparent, #ff86b8, transparent); animation: scan 0.6s linear infinite; }
+    @keyframes scan { to { left: 105%; } }
+    .g-result { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 auto 8px; max-width: 280px;
+      border-radius: 12px; opacity: 0; transform: perspective(600px) rotateY(90deg) scale(0.8); }
+    .g-result.flip { animation: card-flip 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+    @keyframes card-flip { from { opacity: 0; transform: perspective(600px) rotateY(90deg) scale(0.8); } to { opacity: 1; transform: perspective(600px) rotateY(0) scale(1); } }
+    .g-result .glv { font-size: 18px; font-weight: bold; width: 26px; text-align: center; }
+    .g-result .gn { font-size: 14px; font-weight: bold; }
+    .g-result .gd { font-size: 10px; margin-top: 2px; }
+    .g-S { background: linear-gradient(135deg,#3d2a05,#5c3d08); border: 1.5px solid #ffd76e; color: #ffd76e; animation: card-flip 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards, gold-breathe 1.6s ease-in-out 0.5s infinite; }
+    @keyframes gold-breathe { 50% { box-shadow: 0 0 26px rgba(255,215,110,0.75); } }
+    .g-A { background: linear-gradient(135deg,#2a1740,#3d2260); border: 1.5px solid #c86bff; color: #e0b3ff; }
+    .g-B { background: rgba(90,160,255,0.08); border: 1.5px solid #5ac8ff; color: #a8dcff; }
+    .g-flash { position: fixed; inset: 0; background: radial-gradient(circle, rgba(255,215,110,0.85), rgba(255,215,110,0.2) 60%, transparent); opacity: 0; pointer-events: none; z-index: 30; }
+    .g-flash.go { animation: flash-out 0.7s ease-out forwards; }
+    @keyframes flash-out { from { opacity: 1; } to { opacity: 0; } }
+    .g-close { display: block; margin: 12px auto 0; padding: 8px 40px; border-radius: 999px; border: none;
+      background: linear-gradient(135deg,#ff86b8,#ff9ec7); color: #3a1226; font-weight: bold; cursor: pointer; }
+    /* 奖励站卡片（升级后提醒男主人发放实物/情绪价值） */
+    .reward-card {
+      padding: 9px 11px; margin-bottom: 10px; border-radius: 10px; font-size: 11px; line-height: 1.6;
+      color: #ffe3f0; background: rgba(255, 214, 110, 0.08); border: 1px solid rgba(255, 215, 110, 0.45);
+      animation: pulse 2s infinite;
+    }
+    .reward-card .buy { margin: 6px 6px 0 0; padding: 3px 10px; font-size: 11px; }
+    .reward-card .buy.later { background: rgba(255,255,255,0.1); color: rgba(255,227,240,0.7); }
+    /* ===== 养成页 Tab 分层（P1-4）：常驻头部 + 6 Tab 面板 ===== */
+    #nur-tabs { display: flex; gap: 4px; position: sticky; top: 0; z-index: 8; background: #191122; padding: 6px 2px;
+      margin: 0 0 10px; border-radius: 10px; border: 1px solid rgba(255,134,184,0.18); }
+    .nur-tab { flex: 1; padding: 6px 2px; border-radius: 8px; border: 1px solid transparent; background: transparent;
+      color: rgba(255,227,240,0.65); font: 11px "Microsoft YaHei", sans-serif; cursor: pointer; white-space: nowrap;
+      transition: background 0.15s ease, color 0.15s ease; }
+    .nur-tab:hover { color: #ffe3f0; background: rgba(255,134,184,0.08); }
+    .nur-tab.on { background: rgba(255,134,184,0.18); border-color: rgba(255,134,184,0.45); color: #ff9ec7; font-weight: bold; }
+    .nur-panel { display: none; }
+    .nur-panel.on { display: block; }
+    /* 徽章墙（P1-7）：格子卡片化 + hover 上浮光晕，可发现性拉满 */
+    .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .ach-cell { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; cursor: pointer;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .ach-cell.on { background: rgba(255,215,110,0.12); border-color: rgba(255,215,110,0.5); }
+    .ach-cell .ach-ico { font-size: 20px; flex: none; }
+    .ach-cell:not(.on) .ach-ico { filter: grayscale(1); opacity: 0.4; }
+    .ach-cell .ach-nm { font-size: 11px; color: #ffe3f0; line-height: 1.3; }
+    .ach-cell .ach-st { font-size: 9px; color: rgba(255,227,240,0.6); }
+    .ach-cell.on .ach-st { color: #ffd76e; }
+    .ach-cell:hover { transform: translateY(-2px); box-shadow: 0 0 12px rgba(255,215,110,0.35); }
+    #ach-pop { position: absolute; top: 46px; right: 8px; z-index: 30; width: 230px; padding: 14px;
+      background: rgba(14,10,20,0.97); border: 1px solid #ffd76e; border-radius: 14px; display: none; text-align: center; }
+    #ach-pop.show { display: block; }
+    #ach-pop .ap-ico { font-size: 30px; }
+    #ach-pop .ap-nm { font-size: 13px; font-weight: bold; color: #ffd76e; margin: 6px 0 4px; }
+    #ach-pop .ap-ds { font-size: 11px; line-height: 1.6; color: #ffe3f0; }
+    #ach-pop .ap-tip { font-size: 10px; color: rgba(255,227,240,0.62); margin-top: 6px; }
+    /* 十连结果：最佳置顶大卡 + 其余 3 列网格（P0-3），S 卡不再淹没在纵向堆叠里 */
+    .g-best-tag { display: inline-block; margin-left: auto; font-size: 9px; color: #3a1226; background: #ffd76e;
+      border-radius: 999px; padding: 1px 8px; font-weight: bold; flex: none; }
+    .g-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 auto 8px; max-width: 340px; }
+    .g-grid .g-result { margin: 0; max-width: none; flex-direction: column; text-align: center; padding: 8px 4px; gap: 2px; }
+    .g-grid .g-result .gn { font-size: 10px; line-height: 1.3; word-break: break-all; }
+    .g-grid .g-result .gd { display: none; }
+    .g-grid .g-result .glv { width: auto; }
+    /* 顶栏低状态红点（pet:state-low）：有提醒才出现，点击直达养成页 */
+    #low-btn { display: none; width: 26px; height: 26px; border-radius: 8px; border: 1px solid rgba(255,77,77,0.6);
+      background: rgba(255,77,77,0.15); font-size: 13px; cursor: pointer; line-height: 1;
+      -webkit-app-region: no-drag; animation: pulse 1.2s infinite; }
+    #low-btn.show { display: block; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="top">
+      <span id="title">蕾米 · 通讯</span>
+      <div id="seg"><div id="seg-inner">
+        <button class="seg-btn on" id="btn-chat">陪聊</button>
+        <button class="seg-btn" id="btn-guide">查攻略</button>
+        <button class="seg-btn" id="btn-nurture">养成</button>
+        <button class="seg-btn" id="btn-push">推送</button>
+      </div></div>
+      <button id="low-btn" title="">⚠</button>
+      <button id="qr-btn" title="手机监控">📱</button>
+      <button id="close" title="关闭">✕</button>
+    </div>
+    <div id="qr-pop">
+      <img id="qr-img" alt="扫码打开手机监控">
+      <div class="hint">📱 手机连同一 WiFi，扫码即可实时查看状态/抽卡/仓库——<b>无需装 App</b></div>
+      <div class="url" id="qr-url"></div>
+    </div>
+    <div id="ach-pop"></div>
+    <div id="flow"></div>
+    <div id="guide-flow"></div>
+    <div id="push-flow"></div>
+    <div id="nurture">
+      <div id="nur-head"></div>
+      <div id="nur-tabs"></div>
+      <div class="nur-panel" data-panel="tasks"></div>
+      <div class="nur-panel" data-panel="dungeon"></div>
+      <div class="nur-panel" data-panel="gacha"></div>
+      <div class="nur-panel" data-panel="warehouse"></div>
+      <div class="nur-panel" data-panel="ach"></div>
+      <div class="nur-panel" data-panel="shop"></div>
+    </div>
+    <div id="g-overlay"><canvas id="g-canvas"></canvas><div class="g-flash" id="g-flash"></div><div id="g-stage"></div></div>
+    <div id="nur-toast"></div>
+    <div id="foot">
+      <button class="ai-toggle" id="tg-web" title="联网搜索">🌐</button>
+      <button class="ai-toggle" id="tg-reason" title="深度思考">🧠</button>
+      <input id="inp" type="text" maxlength="300" autocomplete="off">
+      <button id="send" title="发送">➤</button>
+    </div>
+  </div>
+  <script>
+    // 消息流：历史回放 + 陪聊/攻略双模式；发送链路复用主进程 pet:chat / pet:guide-query
+    const flow = document.getElementById('flow');
+    const inp = document.getElementById('inp');
+    const sendBtn = document.getElementById('send');
+    const btnChat = document.getElementById('btn-chat');
+    const btnGuide = document.getElementById('btn-guide');
+    let mode = 'chat';
+    let busy = false;
+
+    const btnNurture = document.getElementById('btn-nurture');
+    const btnPush = document.getElementById('btn-push');
+    const nurEl = document.getElementById('nurture');
+    const flowEl = document.getElementById('flow');
+    const guideFlowEl = document.getElementById('guide-flow');
+    const pushFlowEl = document.getElementById('push-flow');
+    const footEl = document.getElementById('foot');
+    // 各 tab 对应的页面容器：陪聊/攻略为消息流，推送为卡片列表，养成为独立面板
+    const pages = { chat: flowEl, guide: guideFlowEl, push: pushFlowEl };
+    function setMode(m) {
+      mode = m;
+      btnChat.classList.toggle('on', m === 'chat');
+      btnGuide.classList.toggle('on', m === 'guide');
+      btnNurture.classList.toggle('on', m === 'nurture');
+      btnPush.classList.toggle('on', m === 'push');
+      const isNur = m === 'nurture';
+      const isPush = m === 'push';
+      for (const [k, el] of Object.entries(pages)) el.style.display = (!isNur && k === m) ? 'flex' : 'none';
+      nurEl.classList.toggle('show', isNur);
+      footEl.style.display = isNur || isPush ? 'none' : 'flex';
+      if (isNur) { document.getElementById('low-btn').classList.remove('show'); renderNurture(); }
+      else {
+        inp.placeholder = m === 'guide' ? '想查什么攻略？例如：耀变伤害 配队' : '和蕾米说点什么…';
+        if (!isPush) inp.focus();
+      }
+    }
+    btnChat.addEventListener('click', () => setMode('chat'));
+    btnGuide.addEventListener('click', () => setMode('guide'));
+    btnNurture.addEventListener('click', () => setMode('nurture'));
+    btnPush.addEventListener('click', () => setMode('push'));
+    window.pet.onChatMode((m) => setMode(m));
+
+    document.getElementById('close').addEventListener('click', () => window.close());
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
+
+    function scrollDown(el, smooth) {
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+      });
+    }
+
+    function addMsg(role, text, opt, container) {
+      opt = opt || {};
+      const host = container || flow;
+      const row = document.createElement('div');
+      row.className = 'msg ' + role;
+      const ava = document.createElement('div');
+      ava.className = 'ava';
+      const bub = document.createElement('div');
+      bub.className = 'bubble';
+      bub.textContent = text;
+      if (opt.source) {
+        const s = document.createElement('span');
+        s.className = 'src';
+        s.textContent = '─ ' + opt.source;
+        bub.appendChild(s);
+      }
+      row.appendChild(ava);
+      row.appendChild(bub);
+      host.appendChild(row);
+      scrollDown(host, !opt.instant);
+      return bub;
+    }
+
+    let typingRow = null;
+    function showTyping() {
+      typingRow = document.createElement('div');
+      typingRow.className = 'msg remi';
+      typingRow.innerHTML = '<div class="ava"></div><div class="bubble"><div class="typing"><i></i><i></i><i></i></div></div>';
+      flow.appendChild(typingRow);
+      scrollDown(true);
+    }
+    function hideTyping() {
+      if (typingRow) { typingRow.remove(); typingRow = null; }
+    }
+
+    const tgWeb = document.getElementById('tg-web');
+    const tgReason = document.getElementById('tg-reason');
+    for (const b of [tgWeb, tgReason]) b.addEventListener('click', () => { if (!busy) b.classList.toggle('on'); });
+    // 手机监控：📱 按钮弹二维码（qrcode 由主进程生成）
+    const qrPop = document.getElementById('qr-pop');
+    document.getElementById('qr-btn').addEventListener('click', async () => {
+      const r = await window.pet.mobileQr();
+      document.getElementById('qr-img').src = r.qr;
+      document.getElementById('qr-url').textContent = r.url;
+      qrPop.classList.toggle('show');
+    });
+
+    async function send() {
+      const t = inp.value.trim();
+      if (!t || busy) return;
+      const web = tgWeb.classList.contains('on');
+      const reason = tgReason.classList.contains('on');
+      busy = true;
+      sendBtn.disabled = true;
+      tgWeb.disabled = tgReason.disabled = true;
+      inp.value = '';
+      if (mode === 'guide') {
+        addMsg('user', t, {}, guideFlowEl);
+        showTyping();
+        const res = await window.pet.guideQuery(t);
+        hideTyping();
+        if (res.error) addMsg('remi', '（攻略库暂时联系不上…稍后再查）', {}, guideFlowEl);
+        else addMsg('remi', res.reply, { source: res.source || '在线检索' }, guideFlowEl);
+        scrollDown(guideFlowEl, true);
+      } else {
+        addMsg('user', t);
+        // 流式陪聊：空气泡起步，delta 增量追加；reasoner 的思考进折叠块
+        const row = document.createElement('div');
+        row.className = 'msg remi';
+        row.innerHTML = '<div class="ava"></div><div class="bubble"></div>';
+        flow.appendChild(row);
+        scrollDown(true);
+        const bub = row.querySelector('.bubble');
+        const bodySpan = document.createElement('span');
+        bub.appendChild(bodySpan);
+        let acc = '', thinkAcc = '';
+        let thinkBox = null, thinkBody = null;
+        const off = window.pet.onChatDelta((d) => {
+          if (d.reqId !== reqId) return;
+          if (d.reasoning) {
+            thinkAcc += d.reasoning;
+            if (!thinkBox) {
+              thinkBox = document.createElement('div');
+              thinkBox.className = 'think-box live';
+              thinkBox.innerHTML = '<div class="think-head">💭 思考中…</div><div class="think-body"></div>';
+              thinkBody = thinkBox.querySelector('.think-body');
+              bub.prepend(thinkBox);
+            }
+            thinkBody.textContent = thinkAcc.slice(-600);
+            thinkBody.scrollTop = thinkBody.scrollHeight;
+            scrollDown(true);
+          }
+          if (d.content) {
+            acc += d.content;
+            bodySpan.textContent = acc;
+            scrollDown(true);
+          }
+        });
+        const reqId = 'r' + Date.now() + Math.floor(Math.random() * 1e4);
+        const res = await window.pet.chat({ text: t, reqId, web, reason });
+        off();
+        if (res.error) {
+          bodySpan.textContent = '（通讯中断了…共犯稍后再找我）';
+        } else {
+          bodySpan.textContent = res.reply;
+          if (res.reasoning) {
+            const tb = document.createElement('div');
+            tb.className = 'think-box';
+            tb.innerHTML = '<div class="think-head">💭 已深度思考（点击展开）</div><div class="think-body"></div>';
+            tb.querySelector('.think-body').textContent = res.reasoning;
+            tb.querySelector('.think-head').addEventListener('click', () => tb.classList.toggle('open'));
+            bub.prepend(tb);
+          }
+        }
+        scrollDown(true);
+      }
+      busy = false;
+      sendBtn.disabled = false;
+      tgWeb.disabled = tgReason.disabled = false;
+      inp.focus();
+    }
+    sendBtn.addEventListener('click', send);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+
+    // 启动：回放主进程共享的历史（本体与聊天窗心意相通）
+    (async () => {
+      try {
+        const hist = await window.pet.getChatHistory();
+        hist.forEach((m) => addMsg(m.role === 'user' ? 'user' : 'remi', m.content, { instant: true }));
+      } catch (_e) { /* 历史拉取失败不阻塞聊天 */ }
+      setMode('chat');
+    })();
+
+    // 推送流：独立界面，新闻卡片列表（桌宠气泡只当提醒）
+    function addPushCard(it) {
+      const empty = pushFlowEl.querySelector('.push-empty');
+      if (empty) empty.remove();
+      const card = document.createElement('div');
+      card.className = 'push-card';
+      const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      card.innerHTML = '<div class="pt"></div><div class="pb"></div><div class="ptime"></div>';
+      card.querySelector('.pt').textContent = it.title || '📰 推送';
+      card.querySelector('.pb').textContent = it.body || '';
+      card.querySelector('.ptime').textContent = '🕒 ' + time;
+      pushFlowEl.appendChild(card);
+      scrollDown(pushFlowEl, true);
+    }
+    window.pet.onPush((it) => addPushCard(it));
+
+    // ===== 养成页 =====
+    const nurToast = document.getElementById('nur-toast');
+    let toastTimer = null;
+    function toast(msg) {
+      nurToast.textContent = msg;
+      nurToast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => nurToast.classList.remove('show'), 2200);
+    }
+    // 双端术语唯一源（主进程下发）；取不到时用硬编码兜底，保证离线/旧主进程也能渲染
+    let T = {};
+    (async () => { try { T = (await window.pet.getI18n()) || {}; } catch (_e) { T = {}; } })();
+    function tt(key, fallback) { return (T && T[key]) || fallback; }
+    // 钱包数字滚动（P0-2）：300ms 插值，数字变化不再瞬跳
+    function animateNumber(el, from, to, ms) {
+      if (!el) return;
+      const t0 = performance.now();
+      const step = (t) => {
+        const p = Math.min(1, (t - t0) / ms);
+        el.textContent = Math.round(from + (to - from) * p);
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+    // 状态建议（P0-1）：每条状态可 hover/点击浮出「当前值 + 预计见底 + 建议动作」
+    const STATUS_META = {
+      food: { icon: '🍚', name: '饱食', kind: 'feed', feedKey: 'food' },
+      drink: { icon: '🥤', name: '口渴', kind: 'feed', feedKey: 'drink' },
+      feel: { icon: '💗', name: '心情', kind: 'coax' },
+      energy: { icon: '⚡', name: '精力', kind: 'rest' },
+    };
+    let lastState = null; // 最近一次养成状态快照（浮层/快捷投喂共用）
+    function barHtml(key, label, val) {
+      const low = val < 20;
+      const warn = low ? '<span class="warn">⚠</span> ' : ''; // 红脉冲之外叠加文字，不只靠颜色
+      const quick = low ? quickActionHtml(key) : '';
+      return `<div class="stat" data-key="${key}"><div class="lab"><span>${warn}${label}</span><span>${val}/100</span></div>` +
+        `<div class="bar ${key}"><i${low ? ' class="low"' : ''} style="width:${val}%"></i></div>` +
+        (quick ? `<div style="display:flex;justify-content:flex-end;margin-top:3px">${quick}</div>` : '') +
+        `</div>`;
+    }
+    function quickActionHtml(key) {
+      const m = STATUS_META[key];
+      if (m.kind === 'feed') return `<button class="stat-act" data-quick="feed" data-feedkey="${m.feedKey}">${tt('action.feed', '去投喂')}</button>`;
+      if (m.kind === 'coax') return `<button class="stat-act" data-quick="coax">${tt('action.coax', '哄一哄')}</button>`;
+      return '<span style="font-size:10px;color:rgba(255,227,240,0.62)">让她歇会儿，饱食过半会自然回复</span>';
+    }
+    let statPop = null;
+    function hideStatPop() { if (statPop) { statPop.remove(); statPop = null; } }
+    // 心情表情芯片（P2-1）：心情不再用进度条，改用蕾米的表情反馈——四状态 = 3 条 + 1 个表情
+    function moodChip(v) {
+      let icon, word;
+      if (v >= 80) { icon = '😌'; word = '心情超好，整个人都在发光'; }
+      else if (v >= 50) { icon = '😊'; word = '心情不错，安静陪着你就好'; }
+      else if (v >= 20) { icon = '😕'; word = '有点低落，想被哄一哄'; }
+      else { icon = '😢'; word = '非常低落！快哄哄她'; }
+      const low = v < 20;
+      return `<div class="stat" data-key="feel"><div class="mood-chip${low ? ' low' : ''}">` +
+        `<span class="mc-icon">${icon}</span><span class="mc-word">${word}</span>` +
+        `<span class="mc-val">${v}<small>/100</small></span></div></div>`;
+    }
+    function showStatPop(statEl, key) {
+      const st = lastState;
+      if (!st || !statEl) return;
+      hideStatPop();
+      const m = STATUS_META[key];
+      const rate = (st.decayRate || {})[key] || 0;
+      let est;
+      if (rate < 0) {
+        const h = Math.max(0, (st[key] - 2) / -rate);
+        est = (h >= 1 ? `约 ${h.toFixed(1)} 小时后见底` : `约 ${Math.max(1, Math.round(h * 60))} 分钟后见底`) + `（${rate}/小时）`;
+      } else {
+        est = `正在自然回复（+${rate}/小时）`;
+      }
+      let acts = '';
+      if (m.kind === 'feed') acts = `<button class="buy" data-quick="feed" data-feedkey="${m.feedKey}">🍫 ${tt('action.feed', '去投喂')}</button>`;
+      else if (m.kind === 'coax') acts = `<button class="buy" data-quick="coax">💗 ${tt('action.coax', '哄一哄')}</button><span class="sp-tip">或去仓库用张券（心情+3）</span>`;
+      else acts = '<span class="sp-tip">精力靠时间回复：饱食 >50 时每小时 +3</span>';
+      const pop = document.createElement('div');
+      pop.id = 'stat-pop';
+      pop.innerHTML = `<div class="sp-t">${m.icon} ${m.name} ${st[key]}/100</div><div class="sp-est">${est}</div><div class="sp-acts">${acts}</div>`;
+      statEl.appendChild(pop);
+      statPop = pop;
+    }
+    // 快捷投喂：浮层就地换成 3 个最实惠的可买商品，一键喂（P0-1「看见→想做→做到」一次点击）
+    function openQuickFeed(feedKey) {
+      if (!statPop || !lastState) return;
+      const items = (lastState.shop || [])
+        .filter((it) => (it[feedKey] || 0) > 0 && (it.minLv || 1) <= lastState.level)
+        .sort((a, b) => a.price - b.price).slice(0, 3);
+      statPop.querySelector('.sp-t').textContent = feedKey === 'food' ? '🍫 快捷投喂' : '🥤 快捷补给';
+      statPop.querySelector('.sp-est').textContent = `挑一样最实惠的（现有 ${tt('money.icon', '💰')}${lastState.money}）`;
+      statPop.querySelector('.sp-acts').innerHTML = items.length
+        ? items.map((it) => `<button class="buy" data-feed="${it.id}" ${lastState.money < it.price ? 'disabled' : ''}>${it.name} ${it.price}${tt('money.icon', '💰')}</button>`).join('')
+        : '<span class="sp-tip">丁尼不够了…先去打工吧</span>';
+    }
+    function fxText(it) {
+      const m = [];
+      if (it.food) m.push(`饱食+${it.food}`);
+      if (it.drink) m.push(`口渴${it.drink > 0 ? '+' : ''}${it.drink}`);
+      if (it.feel) m.push(`心情+${it.feel}`);
+      if (it.energy) m.push(`精力+${it.energy}`);
+      if (it.health) m.push(`健康${it.health > 0 ? '+' : ''}${it.health}`);
+      return m.join(' ');
+    }
+    let workTicker = null;
+    // ===== 养成页 Tab 分层（P1-4）：头部+状态条常驻，6 面板收纳，切换纯本地显隐 =====
+    const NUR_TABS = [
+      { id: 'tasks', label: '📋 任务' },
+      { id: 'dungeon', label: '⚔️ 副本' },
+      { id: 'gacha', label: '🎰 调频' },
+      { id: 'warehouse', label: '📦 仓库' },
+      { id: 'ach', label: '🏅 成就' },
+      { id: 'shop', label: '🛒 逛街' },
+    ];
+    let nurTab = 'tasks';
+    let lastGFil = null, lastMoney = null; // 钱包滚动锚点：重渲后从旧值滚到新值
+    function initNurTabs() {
+      document.getElementById('nur-tabs').innerHTML = NUR_TABS.map((t) =>
+        `<button class="nur-tab${t.id === nurTab ? ' on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('');
+    }
+    function switchNurTab(id) {
+      nurTab = id;
+      nurEl.querySelectorAll('.nur-tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+      nurEl.querySelectorAll('.nur-panel').forEach((p) => p.classList.toggle('on', p.dataset.panel === id));
+      hideStatPop();
+    }
+    function setPanel(id, html) {
+      const p = nurEl.querySelector(`.nur-panel[data-panel="${id}"]`);
+      if (p) p.innerHTML = html;
+    }
+    async function renderNurture() {
+      const st = await window.pet.nurtureState();
+      lastState = st;
+      renderNurHead(st);
+      renderNurPanels(st);
+      nurEl.querySelectorAll('.nur-panel').forEach((p) => p.classList.toggle('on', p.dataset.panel === nurTab));
+      if (st.workBusy) { startWorkAnim(st.finishAt || 0, st.workMs || 45000); }
+      if (workTicker && !st.workBusy) { clearInterval(workTicker); workTicker = null; }
+    }
+    function renderNurHead(st) {
+      const pct = Math.min(100, Math.round(st.exp / st.expNext * 100));
+      const born = (st.gacha || {}).bornAt || Date.now();
+      const days = Math.max(1, Math.ceil((Date.now() - born) / 86400000)); // 修复：bornAt 原来读顶层(不存在)，陪伴天数恒显示 1
+      let html = `<div class="n-top"><span class="n-level">Lv.${st.level}</span><span class="n-title">${st.title}</span>` +
+        `<div class="n-expbar"><i style="width:${pct}%"></i></div>` +
+        `<span class="n-money">${tt('money.icon', '💰')} ${tt('money.name', '丁尼')} <b id="w-money">${st.money}</b></span></div>`;
+      html += `<div style="font-size:10px;color:rgba(255,227,240,0.62);margin-bottom:8px"> 已一起养了她 ${days} 天 · 喂食 ${st.stats.fedTotal || 0} 次 · 打工 ${st.stats.workTotal || 0} 次 · 聊天 ${st.stats.chatTotal || 0} 次</div>`;
+      html += barHtml('food', `${tt('status.food.icon', '🍚')} ${tt('status.food', '饱食')}`, st.food) +
+        barHtml('drink', `${tt('status.drink.icon', '🥤')} ${tt('status.drink', '口渴')}`, st.drink) +
+        moodChip(st.feel) +
+        barHtml('energy', `${tt('status.energy.icon', '⚡')} ${tt('status.energy', '精力')}`, st.energy);
+      if (st.poor) html += `<div style="font-size:11px;color:#ff8a8a;margin-bottom:6px">她快撑不住了，快喂点东西！</div>`;
+      if (st.activity) html += `<div class="activity-banner">🎉 ${st.activity.name} 进行中（菲林 ×${st.activity.filMult}）${st.activity.desc ? '——' + st.activity.desc : ''}</div>`;
+      document.getElementById('nur-head').innerHTML = html;
+      if (lastMoney != null && st.money !== lastMoney) animateNumber(document.getElementById('w-money'), lastMoney, st.money, 300);
+      lastMoney = st.money;
+    }
+    function renderNurPanels(st) {
+      const g = st.gacha;
+      const done = g.tasks || [];
+      // ---- 任务（含真人奖励站）----
+      let h = '';
+      if (st.rewardPending) {
+        h += `<div class="reward-card">🎁 <b>有奖励待发放！</b>她升级啦～把实物（奶茶/零食/小礼物）或情绪价值（夸夸/陪伴）亲手交给她，然后点此记录：<br>` +
+          `<button class="buy rw" data-type="physical">🧋 实物奖励已发</button>` +
+          `<button class="buy rw" data-type="emotional">💗 情绪价值已给</button>` +
+          `<button class="buy rw later" data-type="later">暂缓</button></div>`;
+      } else {
+        h += `<div style="font-size:10px;color:rgba(255,227,240,0.6);margin-bottom:6px">🎁 ${tt('panel.reward', '真人奖励站')} · 累计：实物 ×${st.rewards.physical} · 情绪价值 ×${st.rewards.emotional}（升级时会提醒发放哦）</div>`;
+      }
+      h += `<div class="n-sec">📋 ${tt('panel.tasks', '今日任务')}</div>`;
+      const taskDefs = st.taskDefs || [];
+      if (taskDefs.length && taskDefs.every((t) => done.includes(t.id))) {
+        h += `<div class="task-all-done">今日全部完成 🌟 蕾米今天也很努力！</div>`;
+      }
+      for (const t of taskDefs) { // 名称与奖励数值以主进程下发为准（此前硬编码与实发不符）
+        const ok = done.includes(t.id);
+        h += `<div class="task${ok ? ' done' : ''}" data-tid="${t.id}"><span class="tk-name">${t.name}</span><span class="tk-st">${ok ? '✓ +' + t.fil + '🪙' : '+' + t.fil + '🪙'}</span></div>`;
+      }
+      setPanel('tasks', h);
+      // ---- 副本（v2 考研特训：每科每日 5 题 · 一次作答 · 周全勤结算母带） ----
+      // quizLive 时面板正停留在题目/结果上：任务推送触发的 renderNurture 不得把它刷回选科页
+      if (!quizLive) {
+      const qz = st.quiz || { daily: {}, stats: {}, week: { fullDays: 0 } };
+      const qCards = ['history', 'english', 'politics'].map((s) => {
+        const left = Math.max(0, 5 - (qz.daily[s] || 0));
+        const qst = (qz.stats || {})[s] || { asked: 0, correct: 0 };
+        const acc = qst.asked ? Math.round((qst.correct / qst.asked) * 100) : null;
+        return `<button class="buy" data-subject="${s}" style="width:100%;padding:10px;text-align:left;${left ? '' : 'opacity:0.45'}">` +
+          { history: '📜 历史 · 313 统考风格', english: '🔤 英语 · 考研难度', politics: '🔴 政治 · 考研题库' }[s] +
+          `<br><span style="font-size:10px;font-weight:normal">${left ? `今日还可答 ${left}/5 题` : '今日 5 题已完成 ✓'}${acc != null ? ` · 正确率 ${acc}%` : ' · 未开答'}</span></button>`;
+      }).join('');
+      const engDone = done.includes('english');
+      setPanel('dungeon',
+        `<div class="n-sec">🏯 ${tt('panel.dungeon', '备考副本')} · 考研特训</div>` +
+        `<div style="font-size:11px;color:rgba(255,227,240,0.62);margin-bottom:8px">${engDone ? '✅ 今日「备考充电」任务已完成' : '答满一科 5 题 = 完成今日「备考充电」'}<br>每题只有一次作答机会 · 答对得菲林（8~16🪙 按难度）· 难度随正确率自动调整</div>` +
+        `<div style="display:flex;flex-direction:column;gap:8px">${qCards}</div>` +
+        `<div style="font-size:10px;color:rgba(255,227,240,0.55);margin-top:8px">🔐 周全勤：本周 ${((qz.week || {}).fullDays) || 0}/5 天三科答满，攒满 5 天发 1 张加密母带</div>`);
+      }
+      // ---- 调频 ----
+      h = '';
+      if (!g.introSeen) {
+        h += `<div class="intro-card">✨ <b>欢迎来到${tt('panel.gacha', '小蕾米调频')}！</b><br>① 做每日任务赚 <b>菲林</b>；② 160 菲林兑换 1 张母带；③ 用母带抽卡，抽中的奖品由男主人兑现！连续登录 7 天送十连哦♪<button class="buy" id="intro-ok">知道了，开抽！</button></div>`;
+      }
+      h += `<div class="g-wallet"><span>${tt('wallet.fil.icon', '🪙')} ${tt('wallet.fil', '菲林')} <b id="w-fil">${g.fil}</b></span>` +
+        `<span>${tt('wallet.stdTape.icon', '🎞')} ${tt('wallet.stdTape', '原装母带')} ${g.stdTapes}</span>` +
+        `<span>${tt('wallet.encTape.icon', '🔐')} ${tt('wallet.encTape', '加密母带')} ${g.encTapes}</span>` +
+        `<span>🔥 ${tt('wallet.streak', '连签')} ${g.loginStreak}/7 天</span></div>`;
+      h += `<div class="g-pools">` +
+        `<div class="g-pool"><div class="gp-name">${tt('panel.poolStd', '常规调频')}</div><div class="gp-up">奖品：奶茶自由券等</div><div class="gp-pity">保底 ${g.stdPity}/90</div>` +
+        `<div class="g-btns"><button class="g-btn" data-act="pull" data-pool="std" data-n="1" ${g.stdTapes < 1 ? 'disabled' : ''}>单抽</button><button class="g-btn" data-act="pull" data-pool="std" data-n="10" ${g.stdTapes < 10 ? 'disabled' : ''}>十连</button></div>` +
+        `<div class="g-btns" style="margin-top:4px"><button class="g-btn alt" data-act="exch" data-kind="std" ${g.fil < 160 ? 'disabled' : ''}>160🪙 兑换</button></div></div>` +
+        `<div class="g-pool lim"><div class="gp-name">${tt('panel.poolLim', '独家调频')} · ${g.banner.upS.name}</div><div class="gp-up">UP：${g.banner.upS.desc}</div><div class="gp-pity">${g.limGuarantee ? '<b>大保底必出 UP！</b>' : '50% UP · '}保底 ${g.limPity}/90</div>` +
+        `<div class="g-btns"><button class="g-btn" data-act="pull" data-pool="lim" data-n="1" ${g.encTapes < 1 ? 'disabled' : ''}>单抽</button><button class="g-btn" data-act="pull" data-pool="lim" data-n="10" ${g.encTapes < 10 ? 'disabled' : ''}>十连</button></div>` +
+        `<div class="g-btns" style="margin-top:4px"><button class="g-btn alt" data-act="exch" data-kind="enc" ${g.fil < 160 ? 'disabled' : ''}>160🪙 兑换</button></div></div></div>`;
+      const recent = (g.history || []).slice(0, 8);
+      if (recent.length) {
+        h += `<details class="disclosure"><summary>📜 ${tt('panel.history', '抽卡记录')}（最近 ${recent.length} 条）</summary><div>` +
+          recent.map((r, i) => {
+            const dot = r.tier === 'S' ? tt('rarity.S', '🟡') : r.tier === 'A' ? tt('rarity.A', '🟣') : tt('rarity.B', '🔵');
+            const line = `${dot} ${r.name}${r.up ? ' ★UP' : ''} · ${r.pool === 'lim' ? '限定' : '常驻'}`;
+            return i === 0 ? `<span class="rec-first">${line} · ${new Date(r.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} ✨</span>` : line;
+          }).join('<br>') + `</div></details>`;
+      }
+      h += `<details class="disclosure"><summary>📄 概率公示与制度说明</summary><div>本卡池机制对标《绝区零》：S 级基础概率 0.6%（含保底综合 1.6%），74 抽起概率递增，90 抽必出 S；A 级 5.1%，10 连保底 A；限定池 50% 抽中 UP，歪后下一次必出 UP（大保底）。兑换比：160 菲林 = 1 母带。每日任务与连续登录为主要菲林来源（连签 7 天送加密母带 ×10）。抽中的奖品为现实奖励凭证，由男主人负责兑现；升级速度随等级递减（50×Lv^1.5 经验曲线），以控制兑付节奏。本折叠页即为制度公开页，长期驻留于此。</div></details>`;
+      setPanel('gacha', h);
+      // ---- 仓库（v2.4.0 管理员确认制：申请兑现 → 待男主人确认 → 归档） ----
+      const held = (g.warehouse || []).filter((w) => w.status === 'held');
+      const pending = (g.warehouseAll || []).filter((w) => w.status === 'pending');
+      const used = (g.warehouseAll || []).filter((w) => w.status === 'used');
+      h = `<div class="n-sec">📦 ${tt('panel.warehouse', '奖品仓库')}（${tt('warehouse.held', '持有')} ${held.length}${pending.length ? ' · ⏳ 待确认 ' + pending.length : ''}${g.usedCount ? ' · ' + tt('warehouse.used', '已兑现') + ' ' + g.usedCount : ''}）</div>`;
+      if (held.length > 15) h += `<div style="font-size:11px;color:#ffd76e;margin-bottom:6px">仓库快满啦，快去让男主人兑现～</div>`;
+      if (!held.length && !pending.length) h += `<div style="font-size:11px;color:rgba(255,227,240,0.55);margin-bottom:6px">${tt('warehouse.empty', '还没有奖品，去调频抽一发？')}</div>`;
+      for (const w of held) {
+        h += `<div class="shop-item"><span class="nm">${w.name}</span><span class="fx">${w.desc}</span>` +
+          `<button class="buy" data-wid="${w.id}">${tt('action.use', '申请兑现')}</button></div>`;
+      }
+      for (const w of pending) {
+        h += `<div class="shop-item" style="opacity:.75"><span class="nm">${w.name}</span><span class="fx">⏳ 待男主人确认（当面兑现后由他在管理面板点确认）</span></div>`;
+      }
+      if (used.length) {
+        h += `<details class="disclosure"><summary>📋 ${tt('warehouse.used', '已兑现')}记录（${used.length} 条，永久存档）</summary><div>` +
+          used.map((w) => `${w.tier === 'S' ? tt('rarity.S', '🟡') : w.tier === 'A' ? tt('rarity.A', '🟣') : w.tier === 'B' ? tt('rarity.B', '🔵') : ''} ${w.name} · 兑现于 ${new Date(w.usedAt).toLocaleDateString('zh-CN')}`).join('<br>') + `</div></details>`;
+      }
+      setPanel('warehouse', h);
+      // ---- 成就（格子卡片化 + hover 光晕 + 点击详情弹层，P1-7）----
+      const ACH = st.achDefs || [
+        { id: 'first_feed', icon: '🍼', name: '初次喂食', hint: '累计喂食 1 次解锁' }, { id: 'first_work', icon: '🎨', name: '首次打工', hint: '完成 1 次打工解锁' },
+        { id: 'foodie', icon: '🍚', name: '干饭人', hint: '累计喂食 10 次解锁' }, { id: 'worker', icon: '💼', name: '打工人', hint: '累计打工 10 次解锁' },
+        { id: 'lv3', icon: '⭐', name: '三级跳', hint: '等级达到 3 级解锁' }, { id: 'first_reward', icon: '🎁', name: '被宠爱', hint: '收到第一份真人奖励解锁' },
+        { id: 'rich', icon: '💰', name: '小富婆', hint: '丁尼达到 500 解锁' }, { id: 'gambler', icon: '🎰', name: '初次调频', hint: '完成第一次调频解锁' },
+      ];
+      h = `<div class="n-sec">🏅 ${tt('panel.ach', '成就徽章')}</div><div class="ach-grid">`;
+      for (const a of ACH) {
+        const on = (st.achievements || []).includes(a.id);
+        const when = (st.achLog || {})[a.id];
+        h += `<div class="ach-cell${on ? ' on' : ''}" data-ach="${a.id}" data-icon="${a.icon}" data-name="${a.name}" data-hint="${a.hint || ''}" data-on="${on ? 1 : 0}" data-when="${when || ''}">` +
+          `<span class="ach-ico">${a.icon}</span><span><div class="ach-nm">${a.name}</div>` +
+          `<div class="ach-st">${on ? (when ? new Date(when).toLocaleDateString('zh-CN') + ' 达成' : '已达成') : '🔒 未解锁'}</div></span></div>`;
+      }
+      h += `</div>`;
+      setPanel('ach', h);
+      // ---- 逛街（商店 + 打工）----
+      h = `<div class="n-sec">🛒 ${tt('panel.shop', '商店')} · 点击购买并喂食</div>`;
+      for (const it of st.shop) {
+        const locked = (it.minLv || 1) > st.level;
+        const dis = (st.money < it.price || locked) ? 'disabled' : '';
+        const tip = locked ? `Lv.${it.minLv} 解锁` : `${it.price}💰`;
+        h += `<div class="shop-item" ${locked ? 'style="opacity:0.45"' : ''}><span class="nm">${it.name}</span>` +
+          `<span class="fx">${fxText(it)}</span>` +
+          `<button class="buy" data-id="${it.id}" ${dis}>${tip}</button></div>`;
+      }
+      h += `<div class="n-sec">💼 ${tt('panel.work', '打工')}（三选一）</div><div style="display:flex;gap:6px;margin-bottom:8px">`;
+      for (const [key, w] of Object.entries(st.workTypes || {})) {
+        const dis = (st.workBusy || st.energy < w.energy || st.food < w.food) ? 'disabled' : '';
+        h += `<button class="buy" data-work="${key}" ${dis} style="flex:1;padding:8px 4px;text-align:center">${w.icon} ${w.name}<br><span style="font-size:9px;font-weight:normal">${Math.round(w.ms / 1000)}s · ⚡-${w.energy} · 💰≈${w.base + w.perLv * st.level}</span></button>`;
+      }
+      h += `</div><div id="work-prog" style="display:none"><i></i></div>`;
+      setPanel('shop', h);
+      if (lastGFil != null && g.fil !== lastGFil) animateNumber(document.getElementById('w-fil'), lastGFil, g.fil, 300);
+      lastGFil = g.fil;
+    }
+    function startWorkAnim(finishAt, totalMs) {
+      const prog = document.getElementById('work-prog');
+      totalMs = totalMs || 45000;
+      const btns = nurEl.querySelectorAll('[data-work]');
+      btns.forEach((b) => { b.disabled = true; b.textContent = '⏳ 打工中…'; });
+      if (prog) { prog.style.display = 'block'; prog.firstElementChild.style.width = '0'; }
+      clearInterval(workTicker);
+      workTicker = setInterval(async () => {
+        const remain = Math.max(0, finishAt - Date.now());
+        if (prog && prog.firstElementChild) prog.firstElementChild.style.width = (100 - (remain / totalMs) * 100) + '%';
+        if (remain <= 0) {
+          clearInterval(workTicker); workTicker = null;
+          const r = await window.pet.workResult();
+          if (r.result) toast(`${r.result.name || '打工'}完成！赚了 ${r.result.earn}💰`);
+          renderNurture();
+        }
+      }, 500);
+    }
+
+    // ===== 抽卡结果弹层：调频动画 → 逐张翻入揭示 → 金紫粒子爆发（canvas-confetti 思路原生实现） =====
+    let confettiRAF = null, confettiParts = [];
+    function confettiBurst(colors, n) {
+      const ov = document.getElementById('g-overlay');
+      const cv = document.getElementById('g-canvas');
+      cv.width = ov.clientWidth; cv.height = ov.clientHeight;
+      const cx = cv.width / 2, cy = cv.height * 0.3;
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 7;
+        confettiParts.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 3,
+          g: 0.18, life: 60 + Math.random() * 40, size: 3 + Math.random() * 4,
+          color: colors[Math.floor(Math.random() * colors.length)], rot: Math.random() * Math.PI });
+      }
+      if (!confettiRAF) runConfetti();
+    }
+    function runConfetti() {
+      const cv = document.getElementById('g-canvas');
+      const ctx = cv.getContext('2d');
+      const step = () => {
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        confettiParts = confettiParts.filter((p) => p.life > 0);
+        for (const p of confettiParts) {
+          p.x += p.vx; p.y += p.vy; p.vy += p.g; p.life -= 1; p.rot += 0.12;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, Math.min(1, p.life / 30));
+          ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        }
+        if (confettiParts.length) confettiRAF = requestAnimationFrame(step);
+        else { confettiRAF = null; ctx.clearRect(0, 0, cv.width, cv.height); }
+      };
+      confettiRAF = requestAnimationFrame(step);
+    }
+    function showGachaResults(results) {
+      const ov = document.getElementById('g-overlay');
+      const stage = document.getElementById('g-stage');
+      ov.classList.add('show');
+      // 阶段一：调频动画（频率滚动 + 扫描线）
+      stage.innerHTML = `<div class="g-tuning"><div class="freq" id="g-freq">FM 88.0</div>` +
+        `<div class="g-scan"><i></i></div><div class="t-text">正在调频…搜索她的心意信号</div></div>` +
+        `<button class="g-close" id="g-close" style="visibility:hidden">收下</button>`;
+      const freqEl = document.getElementById('g-freq');
+      const freqTimer = setInterval(() => { freqEl.textContent = 'FM ' + (88 + Math.random() * 20).toFixed(1); }, 70);
+      setTimeout(() => {
+        clearInterval(freqTimer);
+        // 最佳结果置顶（P0-3）：S > A > B，同 tier UP 优先——S 卡不再淹没在十连堆叠里
+        const tw = { S: 3, A: 2, B: 1 };
+        let bestIdx = 0;
+        results.forEach((r, i) => {
+          if (tw[r.tier] * 10 + (r.up ? 1 : 0) > tw[results[bestIdx].tier] * 10 + (results[bestIdx].up ? 1 : 0)) bestIdx = i;
+        });
+        const many = results.length > 1;
+        const best = results[bestIdx];
+        const cardHtml = (r) => `<div class="g-result g-${r.tier}"><span class="glv">${r.tier}</span>` +
+          `<div><div class="gn">${r.name}${r.up ? ' ★UP' : ''}</div><div class="gd" style="color:rgba(255,255,255,0.65)">${r.desc}</div></div></div>`;
+        let html = '';
+        if (many) {
+          html += `<div class="g-result g-${best.tier}" id="g-best" style="max-width:340px">` +
+            `<span class="glv">${best.tier}</span><div><div class="gn">${best.name}${best.up ? ' ★UP' : ''}</div>` +
+            `<div class="gd" style="color:rgba(255,255,255,0.65)">${best.desc}</div></div><span class="g-best-tag">本次最佳</span></div>`;
+          html += `<div class="g-grid">` + results.filter((_r, i) => i !== bestIdx).map(cardHtml).join('') + `</div>`;
+        } else {
+          html += cardHtml(best);
+        }
+        html += `<button class="g-close" id="g-close" style="visibility:hidden">${best.tier === 'S' ? '收下这份心意 🌟' : '收下'}</button>`;
+        stage.innerHTML = html;
+        // 逐张 3D 翻入：最佳卡排第一最先翻；粒子只在最佳卡揭示瞬间触发
+        const cards = stage.querySelectorAll('.g-result');
+        cards.forEach((card, i) => {
+          setTimeout(() => {
+            card.classList.add('flip');
+            if (card.id !== 'g-best' && many) return; // 网格小卡不抢戏
+            if (best.tier === 'S') {
+              confettiBurst(['#ffd76e', '#ffb84d', '#fff2b3', '#ff86b8'], 130);
+              const flash = document.getElementById('g-flash');
+              flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
+            } else if (best.tier === 'A') {
+              confettiBurst(['#c86bff', '#e0b3ff', '#ff9ec7'], 45);
+            }
+          }, 350 + i * 140);
+        });
+        // 结果揭晓后点任意处即可收下（保留按钮；自动收起会让 S 卡更早消失，故不设定时器）
+        setTimeout(() => {
+          const gc = document.getElementById('g-close');
+          if (gc) gc.style.visibility = 'visible';
+          ov.addEventListener('click', closeGacha);
+        }, 350 + cards.length * 140 + 400);
+      }, 1200);
+    }
+    function closeGacha() {
+      const ov = document.getElementById('g-overlay');
+      if (!ov.classList.contains('show')) return; // 幂等：按钮与遮罩冒泡都走这里
+      ov.classList.remove('show');
+      ov.removeEventListener('click', closeGacha);
+      confettiParts = [];
+    }
+    // 备考副本 v2：考研难度 · 每科每日 5 题 · 一次作答不可重答（确认按钮防误触）· 答后出解析
+    // quizSel/quizCtx 为渲染层答题会话状态；判分与配额全在主进程
+    function dungeonPanelEl() { return nurEl.querySelector('.nur-panel[data-panel="dungeon"]'); }
+    let quizSel = [], quizCtx = null, quizLocked = false, quizFinished = false, quizLive = false;
+    const QUIZ_LETTERS = ['A', 'B', 'C', 'D'];
+    async function enterDungeon(subject) {
+      const r = await window.pet.dungeonStart(subject);
+      if (r.error === 'quota') { toast('今日该科 5 题已答完，明天再来～'); return; }
+      if (!r.ok) { toast('副本开启失败'); return; }
+      if (r.passage) toast('📖 今日是阅读日：一篇考研阅读连出 5 题');
+      dungeonStage();
+    }
+    async function dungeonStage() {
+      const q = await window.pet.dungeonQuestion();
+      if (q.error) { quizLive = false; toast('今日该科 5 题已答完，明天再来～'); renderNurture(); return; }
+      quizCtx = q; quizSel = []; quizLocked = false; quizFinished = false; quizLive = true;
+      const p = dungeonPanelEl();
+      if (!p) return;
+      p.innerHTML = `<div class="n-sec">⚔️ ${q.subject}特训 · 第 ${q.idx}/${q.total} 题</div>` +
+        `<div class="dungeon-stamp${q.idx === q.total ? ' boss' : ''}">第 ${q.idx} 题${q.idx === q.total ? ' · BOSS' : ''}</div>` +
+        `<div class="dungeon-body"><div style="font-size:10px;color:#ffd76e;margin-bottom:10px">难度 ${'★'.repeat(q.d)}${'☆'.repeat(5 - q.d)} · ${q.multi ? '多选：选 2~4 项，全对才得分' : '单选'} · ${q.reward}</div>` +
+        (q.passage ? `<div class="quiz-passage">${q.passage}</div>` : '') +
+        `<div style="font-size:13px;line-height:1.6;color:#ffe3f0;margin-bottom:12px">${q.q}</div>` +
+        `<div class="quiz-opts">` + q.opts.map((o, i) => `<button data-i="${i}">${QUIZ_LETTERS[i]}. ${o}</button>`).join('') + `</div>` +
+        `<button class="buy" id="quiz-confirm" disabled style="width:100%;margin-top:8px;opacity:0.5">确认答案（只有一次机会！）</button>` +
+        `<button class="buy" id="quiz-back" data-quit="1" style="width:100%;margin-top:8px;background:rgba(255,255,255,0.08)">放弃（已出的题不退额度）</button></div>`;
+    }
+    function renderQuizResult(r) {
+      const p = dungeonPanelEl();
+      if (!p || !quizCtx) return;
+      const q = quizCtx;
+      const correctList = q.multi ? r.correctAns : [r.correctAns];
+      const optHtml = q.opts.map((o, i) => {
+        const isCorrect = correctList.includes(i);
+        const isMine = quizSel.includes(i);
+        const style = isCorrect ? 'border-color:#7dff8a;background:rgba(125,255,138,0.10)' : isMine ? 'border-color:#ff4d4d;background:rgba(255,77,77,0.10)' : 'opacity:0.45';
+        return `<button disabled style="${style}">${QUIZ_LETTERS[i]}. ${o}${isCorrect ? ' ✓' : isMine ? ' ✗ 你的选择' : ''}</button>`;
+      }).join('');
+      p.innerHTML = `<div class="n-sec">⚔️ ${q.subject}特训 · 第 ${q.idx}/${q.total} 题</div>` +
+        `<div class="dungeon-body">` +
+        `<div style="font-size:16px;font-weight:bold;color:${r.pass ? '#7dff8a' : '#ff8a8a'};margin-bottom:8px">${r.pass ? '✓ 答对了！' : '✗ 答错了（一次作答机会已用）'}</div>` +
+        `<div style="font-size:13px;line-height:1.6;color:#ffe3f0;margin-bottom:8px">${q.q}</div>` +
+        `<div class="quiz-opts">${optHtml}</div>` +
+        `<div class="quiz-ex">💡 ${r.ex}</div>` +
+        `<div style="font-size:12px;color:#ffd76e;margin-bottom:8px">${r.pass ? `+${r.filGot}🪙 +${r.expGot}✨` : '答错无菲林 · 1✨ 安慰奖'}</div>` +
+        (r.finished
+          ? `<div style="font-size:12px;color:#ffe3f0;margin-bottom:8px">🎉 今日 ${q.subject} 训练完成：答对 ${r.correctCount}/${q.total}` +
+            (r.weekFull ? '<br>🔐 本周第 5 个全勤日达成，加密母带 ×1 已到账！' : '') + `</div>` +
+            `<button class="buy" id="quiz-next" style="width:100%;padding:10px">完成</button>`
+          : `<button class="buy" id="quiz-next" style="width:100%;padding:10px">下一题（还剩 ${r.remaining} 题）</button>`) +
+        `</div>`;
+    }
+
+    // ===== 养成页统一事件委托：面板随 renderNurture 重渲也不丢绑定 =====
+    function showAchPop(ds) {
+      const pop = document.getElementById('ach-pop');
+      const on = ds.on === '1';
+      const when = ds.when ? new Date(Number(ds.when)).toLocaleString('zh-CN') : '';
+      pop.innerHTML = `<div class="ap-ico">${ds.icon}</div><div class="ap-nm">${ds.name}</div>` +
+        (on ? `<div class="ap-ds">🏅 已达成${when ? '<br>' + when : ''}</div>` : `<div class="ap-ds">🔒 未解锁</div><div class="ap-tip">${ds.hint || '继续加油～'}</div>`) +
+        `<div class="ap-tip" style="margin-top:8px">点击此处收起</div>`;
+      pop.classList.add('show');
+    }
+    document.getElementById('ach-pop').addEventListener('click', () => document.getElementById('ach-pop').classList.remove('show'));
+    nurEl.addEventListener('click', async (e) => {
+      const cell = e.target.closest('.ach-cell');
+      if (cell) { showAchPop(cell.dataset); return; }
+      // 状态条本体点击：toggle 建议浮层（P0-1）
+      const statEl = e.target.closest('.stat');
+      if (statEl && !e.target.closest('button')) {
+        if (statPop && statPop.parentElement === statEl) hideStatPop();
+        else showStatPop(statEl, statEl.dataset.key);
+        return;
+      }
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.classList.contains('nur-tab')) { switchNurTab(b.dataset.tab); return; }
+      if (b.dataset.quick === 'feed') { openQuickFeed(b.dataset.feedkey); return; }
+      if (b.dataset.quick === 'coax') {
+        const r = await window.pet.feedback(2);
+        toast(r.ok ? '被你哄了一下，她心情好了一点♪' : '刚哄过啦，30 秒后再来～');
+        if (r.ok) renderNurture();
+        return;
+      }
+      if (b.dataset.feed) { // 快捷投喂具体商品
+        const r = await window.pet.feed(b.dataset.feed);
+        if (r.error === 'poor') toast('丁尼不够了…让蕾米打打工吧');
+        else if (r.error) toast('购买失败');
+        else { toast(`喂了 ${r.item}，她很开心♪`); renderNurture(); }
+        return;
+      }
+      if (b.dataset.wid) { // 仓库：申请兑现 → pending，等男主人管理面板确认
+        const r = await window.pet.warehouseUse(b.dataset.wid);
+        if (r.ok) { toast(`已向男主人申请兑现「${r.name}」，等他确认哦♪`); renderNurture(); }
+        return;
+      }
+      if (b.dataset.type) { // 真人奖励发放记录
+        const r = await window.pet.rewardGrant(b.dataset.type);
+        if (r.ok) {
+          toast(b.dataset.type === 'later' ? r.quote : `她收到了！${r.quote}`);
+          if (b.dataset.type !== 'later') addMsg('remi', r.quote);
+        }
+        renderNurture();
+        return;
+      }
+      if (b.id === 'intro-ok') { await window.pet.introSeen(); renderNurture(); return; }
+      if (b.classList.contains('g-btn')) {
+        const act = b.dataset.act;
+        if (act === 'pull') {
+          const r = await window.pet.gachaPull(b.dataset.pool, Number(b.dataset.n));
+          if (r.error === 'notape') { toast('母带不够了，先做任务赚菲林兑换吧'); return; }
+          showGachaResults(r.results);
+          renderNurture();
+        } else if (act === 'exch') {
+          const r = await window.pet.exchange(b.dataset.kind);
+          if (r.error === 'nofil') toast('菲林不足 160');
+          else { toast('兑换成功！'); renderNurture(); }
+        }
+        return;
+      }
+      if (b.dataset.subject) { enterDungeon(b.dataset.subject); return; }
+      if (b.closest('.quiz-opts') && b.dataset.i != null) { // 选项点选：只选中不提交，确认按钮统一一次作答
+        if (quizLocked) return;
+        const i = Number(b.dataset.i);
+        if (quizCtx.multi) {
+          const at = quizSel.indexOf(i);
+          if (at >= 0) quizSel.splice(at, 1); else quizSel.push(i);
+          b.classList.toggle('sel', at < 0);
+        } else {
+          quizSel = [i];
+          b.parentElement.querySelectorAll('button').forEach((x) => x.classList.remove('sel'));
+          b.classList.add('sel');
+        }
+        const c = document.getElementById('quiz-confirm');
+        if (c && quizSel.length) { c.disabled = false; c.style.opacity = 1; }
+        return;
+      }
+      if (b.id === 'quiz-confirm') {
+        if (quizLocked || !quizSel.length) return;
+        quizLocked = true;
+        const r = await window.pet.dungeonSubmit(quizCtx.multi ? quizSel : quizSel[0]);
+        if (r.error) { toast('会话已失效，重新出题'); dungeonStage(); return; }
+        quizFinished = !!r.finished;
+        renderQuizResult(r);
+        if (r.weekFull) toast('🔐 周全勤达成！加密母带 ×1 已到账');
+        return;
+      }
+      if (b.id === 'quiz-next') { if (quizFinished) { quizLive = false; renderNurture(); } else dungeonStage(); return; }
+      if (b.id === 'quiz-back') { if (b.dataset.quit) { quizLive = false; await window.pet.dungeonQuit(); } renderNurture(); return; }
+      if (b.dataset.work) {
+        const r = await window.pet.workStart(b.dataset.work);
+        if (r.error === 'tired') toast('她太累了/太饿了，干不动…先喂点东西');
+        else if (r.error === 'busy') toast('她正在打工中哦');
+        else if (r.ok) { startWorkAnim(r.finishAt, r.ms); toast(`蕾米开始${r.name}了，别打扰她～`); }
+        return;
+      }
+      if (b.dataset.id) { // 商店购买并喂食
+        const r = await window.pet.feed(b.dataset.id);
+        if (r.error === 'poor') toast('丁尼不够了…让蕾米打打工吧');
+        else if (r.error) toast('购买失败');
+        else { toast(`喂了 ${r.item}，她很开心♪`); renderNurture(); }
+      }
+    });
+    // 状态条 hover 浮层（桌面鼠标；浮层是 .stat 子元素，移入浮层不收起）
+    nurEl.addEventListener('mouseover', (e) => {
+      const statEl = e.target.closest('.stat');
+      if (statEl && !statEl.contains(e.relatedTarget)) showStatPop(statEl, statEl.dataset.key);
+    });
+    nurEl.addEventListener('mouseout', (e) => {
+      const statEl = e.target.closest('.stat');
+      if (statEl && !statEl.contains(e.relatedTarget)) hideStatPop();
+    });
+
+    // 任务完成浮字（P0-2）：主进程发奖瞬间推送真实数值，养成页正开着时行内浮字 + 轻量刷新
+    function playTaskFloat(d) {
+      const row = nurEl.querySelector(`.task[data-tid="${d.id}"]`);
+      if (!row) return;
+      const f = document.createElement('span');
+      f.className = 'task-reward-float';
+      f.textContent = `+${d.fil} 菲林 · +${d.exp} exp`;
+      row.appendChild(f);
+      setTimeout(() => f.remove(), 1600);
+    }
+    async function refreshTasksLight() {
+      try {
+        const st = await window.pet.nurtureState();
+        lastState = st;
+        const wf = document.getElementById('w-fil');
+        if (wf && lastGFil != null && st.gacha.fil !== lastGFil) animateNumber(wf, lastGFil, st.gacha.fil, 300);
+        lastGFil = st.gacha.fil;
+        const doneNow = st.gacha.tasks || [];
+        nurEl.querySelectorAll('.task').forEach((row) => {
+          const def = (st.taskDefs || []).find((t) => t.id === row.dataset.tid);
+          if (!def) return;
+          const ok = doneNow.includes(def.id);
+          row.classList.toggle('done', ok);
+          const stEl = row.querySelector('.tk-st');
+          if (stEl) stEl.textContent = ok ? '✓ +' + def.fil + '🪙' : '+' + def.fil + '🪙';
+        });
+        // 全部完成瞬间就地补汇总条（不打断浏览）
+        const tp = nurEl.querySelector('.nur-panel[data-panel="tasks"]');
+        const defs = st.taskDefs || [];
+        if (tp && defs.length && defs.every((t) => doneNow.includes(t.id)) && !tp.querySelector('.task-all-done')) {
+          const bar = document.createElement('div');
+          bar.className = 'task-all-done';
+          bar.textContent = '今日全部完成 🌟 蕾米今天也很努力！';
+          const secEl = tp.querySelector('.n-sec');
+          if (secEl) secEl.after(bar);
+        }
+      } catch (_e) { /* 轻量刷新失败不打扰 */ }
+    }
+    window.pet.onTaskDone((d) => {
+      playTaskFloat(d);
+      toast(`任务完成「${d.name}」 +${d.fil} 🪙`);
+      refreshTasksLight();
+    });
+    // 低状态提醒：顶栏红点 + toast（主进程每状态每日只推一次）
+    const lowBtn = document.getElementById('low-btn');
+    window.pet.onStateLow((d) => {
+      lowBtn.classList.add('show');
+      lowBtn.title = `${d.name}只剩 ${d.val}，${d.act}！`;
+      toast(`⚠ ${d.name}只剩 ${d.val}，${d.act}！`);
+    });
+    lowBtn.addEventListener('click', () => { lowBtn.classList.remove('show'); setMode('nurture'); });
+    window.pet.onWarehouseChanged(() => { renderNurture(); }); // 兑现确认/驳回后同步她的仓库视图
+    initNurTabs();
+  </script>
+</body>
+</html>
