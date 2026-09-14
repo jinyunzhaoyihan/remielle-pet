@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>蕾米埃尔 · 管理</title>
+<style>
+  :root { --bg0:#14141d; --bg1:#1b1b27; --bg2:#232333; --bg3:#2b2b3d; --pink:#ff6b9d; --gold:#ffd76e;
+    --cyan:#5ac8ff; --green:#7dff8a; --red:#ff4757; --text:#ffe3f0; --dim:rgba(255,227,240,.62); }
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+  body { width:100vw; height:100vh; background:var(--bg0); color:var(--text);
+    font-family:'Segoe UI','Microsoft YaHei',sans-serif; font-size:13px; display:flex; flex-direction:column; overflow:hidden; }
+  #titlebar { height:36px; flex:none; display:flex; align-items:center; padding:0 12px; gap:8px;
+    background:var(--bg1); -webkit-app-region:drag; }
+  #titlebar .logo { color:var(--pink); font-weight:bold; letter-spacing:1px; font-size:13px; }
+  #titlebar .sp { flex:1; }
+  #titlebar button { -webkit-app-region:no-drag; width:26px; height:24px; border:none; background:transparent;
+    color:var(--dim); font-size:13px; cursor:pointer; border-radius:5px; }
+  #titlebar button:hover { background:var(--bg3); color:var(--text); }
+  #body { flex:1; overflow-y:auto; padding:14px; }
+  input { width:100%; padding:9px 12px; margin-bottom:10px; border-radius:8px; border:1px solid rgba(255,107,157,.35);
+    background:var(--bg2); color:var(--text); font-size:14px; outline:none; user-select:text; }
+  input:focus { border-color:var(--pink); }
+  input::placeholder { color:rgba(255,227,240,.35); }
+  .btn { width:100%; padding:10px; border:none; border-radius:8px; cursor:pointer; margin-bottom:8px;
+    background:linear-gradient(135deg,#ff86b8,#ff9ec7); color:#3a1226; font-weight:bold; font-size:13px; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.alt { background:var(--bg3); color:var(--text); }
+  .btn.danger { background:linear-gradient(135deg,#a03048,#c04860); color:#ffe3f0; }
+  .btn.mini { width:auto; padding:5px 12px; margin:0; font-size:12px; }
+  .hint { font-size:11px; color:var(--dim); line-height:1.7; margin-bottom:12px; }
+  .ok-msg { font-size:12px; color:var(--green); margin-bottom:10px; line-height:1.6; }
+  .err-msg { font-size:12px; color:var(--red); margin-bottom:10px; line-height:1.6; }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; }
+  .tabs button { flex:1; padding:8px 0; border:none; border-radius:8px; cursor:pointer; background:var(--bg2);
+    color:var(--dim); font-size:12px; font-weight:bold; }
+  .tabs button.on { background:linear-gradient(135deg,#ff6b9d,#ff8fb8); color:#3a1226; }
+  .card { background:var(--bg2); border-radius:10px; padding:10px 12px; margin-bottom:8px; border-left:3px solid var(--pink); }
+  .card.gold { border-left-color:var(--gold); }
+  .card .t { font-size:12px; font-weight:bold; margin-bottom:6px; color:var(--gold); }
+  .row { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
+  .row .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .tm { color:var(--dim); font-size:10px; white-space:nowrap; }
+  .list { max-height:230px; overflow-y:auto; }
+  .list::-webkit-scrollbar { width:5px; } .list::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:3px; }
+  .sec { font-size:11px; color:var(--pink); font-weight:bold; margin:10px 0 8px; letter-spacing:1px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px; background:rgba(255,107,157,.15); color:var(--pink); }
+  .pill.ok { background:rgba(125,255,138,.12); color:var(--green); }
+  .num { font-variant-numeric:tabular-nums; font-weight:bold; color:var(--gold); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+</style>
+</head>
+<body>
+<div id="titlebar"><span class="logo">🔐 蕾米埃尔 · 管理</span><span class="sp"></span>
+  <button id="tb-min">─</button><button id="tb-close">✕</button></div>
+<div id="body"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const $body = $('body');
+  let curTab = 'save';
+  const fmtT = (ms) => new Date(ms).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const fmtSize = (n) => n > 1024 ? (n / 1024).toFixed(1) + 'KB' : n + 'B';
+
+  $('tb-min').addEventListener('click', () => window.pet.adminMinimize());
+  $('tb-close').addEventListener('click', () => window.pet.adminClose());
+
+  function msg(html, ok) {
+    return `<div class="${ok ? 'ok-msg' : 'err-msg'}">${html}</div>`;
+  }
+  async function guard(fn) { // 解锁过期统一处理：任一 denied → 回验证页
+    const r = await fn();
+    if (r && r.error === 'denied') { renderVerify('会话已过期，请重新验证'); return null; }
+    return r;
+  }
+
+  // ===== 状态一：首次设置 PIN =====
+  function renderSetup() {
+    $body.innerHTML = `<div class="hint">首次使用：设置管理员 PIN（4~12 位）。PIN 以加盐 scrypt 哈希存储，<b>丢失无法找回</b>，请牢记。</div>
+      <input id="p1" type="password" placeholder="输入 PIN" maxlength="12">
+      <input id="p2" type="password" placeholder="再输入一次" maxlength="12">
+      <div id="m"></div>
+      <button class="btn" id="do-setup">设置 PIN 并进入</button>`;
+    $('do-setup').addEventListener('click', async () => {
+      const r = await window.pet.adminSetupPin($('p1').value, $('p2').value);
+      if (r.error === 'invalid') $('m').innerHTML = msg('两次输入不一致，或长度不在 4~12 位', false);
+      else if (r.error) $('m').innerHTML = msg('设置失败：' + r.error, false);
+      else renderPanel('✅ 管理员 PIN 已设置');
+    });
+  }
+
+  // ===== 状态二：PIN 验证 =====
+  function renderVerify(extra) {
+    $body.innerHTML = `<div class="hint">${extra || '管理员操作需要验证。'}解锁后 10 分钟内免重复输入。</div>
+      <input id="p" type="password" placeholder="管理员 PIN" maxlength="12">
+      <div id="m"></div>
+      <button class="btn" id="do-verify">解锁</button>`;
+    $('p').focus();
+    const go = async () => {
+      const r = await window.pet.adminVerify($('p').value);
+      if (r.error === 'wrong') $('m').innerHTML = msg('PIN 不正确', false);
+      else if (r.error) $('m').innerHTML = msg('验证失败：' + r.error, false);
+      else renderPanel('🔓 已解锁');
+    };
+    $('do-verify').addEventListener('click', go);
+    $('p').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  }
+
+  // ===== 状态三：管理面板（存档 / 权限 / 安全） =====
+  function renderPanel(okMsg) {
+    $body.innerHTML = `<div id="topmsg">${okMsg ? msg(okMsg, true) : ''}</div>
+      <div class="tabs"><button data-t="save" class="on">🗄 存档</button><button data-t="perm">🎁 权限</button><button data-t="sec">🛡 安全</button></div>
+      <div id="pane"></div>
+      <div style="height:6px"></div>
+      <button class="btn alt" id="do-lock">🔒 立即上锁</button>`;
+    document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+      curTab = b.dataset.t;
+      document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+      renderPane();
+    }));
+    $('do-lock').addEventListener('click', async () => { await window.pet.adminLock(); renderVerify(); });
+    renderPane();
+    window.pet.onWarehouseChanged(() => { if (curTab === 'perm') renderPane(); });
+  }
+  async function renderPane() {
+    const pane = $('pane');
+    if (curTab === 'save') return renderSaveTab(pane);
+    if (curTab === 'perm') return renderPermTab(pane);
+    return renderSecTab(pane);
+  }
+
+  // ---- 存档 Tab ----
+  async function renderSaveTab(pane) {
+    const r = await guard(() => window.pet.adminListBackups());
+    if (!r) return;
+    const baks = r.backups || [];
+    pane.innerHTML = `<button class="btn" id="bk-now">💾 立即备份</button>
+      <div class="grid2" style="margin-bottom:8px">
+        <button class="btn alt" id="bk-folder">📂 存档文件夹</button>
+        <button class="btn alt" id="bk-export">📤 导出存档</button>
+      </div>
+      <button class="btn alt" id="bk-import" style="margin-bottom:12px">📥 导入存档（覆盖当前）</button>
+      <div class="sec">备份列表（${baks.length} 份 · 自动每小时/每日 + 手动）</div>
+      <div class="list">${baks.length ? baks.map((b) =>
+        `<div class="card"><div class="row"><span class="nm">${esc(b.name)}</span><span class="tm">${b.ok ? '' : '⚠ 损坏 '}${fmtSize(b.size)} · ${fmtT(b.at)}</span></div>
+         <div class="row"><span class="tm">${b.name.includes('daily') ? '每日' : b.name.includes('hourly') ? '每小时' : b.name.includes('version') ? '版本升级' : b.name.includes('recovery') ? '恢复前' : '手动'}</span>
+         <span style="flex:1"></span>${b.ok ? `<button class="btn mini" data-restore="${esc(b.name)}">恢复到此</button>` : '<span class="pill">不可用</span>'}</div></div>`).join('')
+      : '<div class="hint">暂无备份——保存一次数据后会自动生成。</div>'}</div>`;
+    $('bk-now').addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminBackupNow());
+      if (r2 && r2.ok) renderPanel('✅ 已备份：' + r2.name);
+    });
+    $('bk-folder').addEventListener('click', () => window.pet.adminOpenSaveFolder());
+    $('bk-export').addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminExport());
+      if (r2 && r2.ok) renderPanel('✅ 已导出');
+    });
+    $('bk-import').addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminImport());
+      if (r2 && r2.ok) renderPanel('✅ 已导入并生效');
+    });
+    pane.querySelectorAll('[data-restore]').forEach((b) => b.addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminRestore(b.dataset.restore));
+      if (r2 && r2.ok) renderPanel('✅ 已恢复：' + b.dataset.restore);
+    }));
+  }
+
+  // ---- 权限 Tab ----
+  async function renderPermTab(pane) {
+    const [rd, ec] = await Promise.all([guard(() => window.pet.adminRedeemList()), guard(() => window.pet.adminEconReport())]);
+    if (!rd || !ec) return;
+    const pend = rd.pending || [];
+    const hist = (ec.history || []).slice(0, 10);
+    pane.innerHTML = `<div class="sec">🎁 待确认兑现（${pend.length}）</div>
+      <div class="list" style="margin-bottom:12px">${pend.length ? pend.map((p) =>
+        `<div class="card gold"><div class="row"><span class="nm">${{ S: '🟡', A: '🟣', B: '🔵' }[p.tier] || ''} ${esc(p.name)}</span><span class="tm">${fmtT(p.pendingAt)} 申请</span></div>
+         <div class="row"><span class="tm" style="white-space:normal">${esc(p.desc)}</span><span style="flex:1"></span>
+         <button class="btn mini" data-cf="${esc(p.id)}">✓ 已兑现</button><button class="btn mini alt" data-rj="${esc(p.id)}">✗ 驳回</button></div></div>`).join('')
+      : '<div class="hint">没有待确认的兑现申请。</div>'}</div>
+      <div class="sec">💼 经济干预（调整会写入审计日志）</div>
+      <div class="card"><div class="row"><span>🪙 菲林</span><span class="num" style="flex:1;text-align:right" id="v-fil">${ec.fil}</span></div>
+        <div class="grid3"><button class="btn mini alt" data-adj="fil|-10">−10</button><button class="btn mini alt" data-adj="fil|10">+10</button><button class="btn mini alt" data-adj="fil|100">+100</button></div></div>
+      <div class="card"><div class="row"><span>🎞 原装母带 <b class="num" id="v-std">${ec.stdTapes}</b></span><span>🔐 加密母带 <b class="num" id="v-enc">${ec.encTapes}</b></span></div>
+        <div class="grid2"><div class="grid3"><button class="btn mini alt" data-adj="std|-1">−1</button><button class="btn mini alt" data-adj="std|1">+1</button><button class="btn mini alt" data-adj="std|10">+10</button></div>
+        <div class="grid3"><button class="btn mini alt" data-adj="enc|-1">−1</button><button class="btn mini alt" data-adj="enc|1">+1</button><button class="btn mini alt" data-adj="enc|10">+10</button></div></div></div>
+      <div class="sec">📜 最近抽卡（${hist.length}/10）</div>
+      <div class="list">${hist.length ? hist.map((h) =>
+        `<div class="row card"><span class="nm">${{ S: '🟡', A: '🟣', B: '🔵' }[h.tier] || ''} ${esc(h.name)}${h.up ? ' ★UP' : ''}</span><span class="tm">${h.pool === 'lim' ? '限定' : '常驻'} · ${fmtT(h.at)}</span></div>`).join('')
+      : '<div class="hint">暂无抽卡记录。</div>'}</div>`;
+    pane.querySelectorAll('[data-cf]').forEach((b) => b.addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminRedeemConfirm(b.dataset.cf));
+      if (r2 && r2.ok) renderPermTab(pane);
+    }));
+    pane.querySelectorAll('[data-rj]').forEach((b) => b.addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminRedeemReject(b.dataset.rj));
+      if (r2 && r2.ok) renderPermTab(pane);
+    }));
+    pane.querySelectorAll('[data-adj]').forEach((b) => b.addEventListener('click', async () => {
+      const [kind, d] = b.dataset.adj.split('|');
+      const r2 = await guard(() => window.pet.adminEconAdjust(kind, Number(d)));
+      if (r2 && r2.ok) { $('v-fil').textContent = kind === 'fil' ? r2.after : undefined; renderPermTab(pane); }
+    }));
+  }
+
+  // ---- 安全 Tab ----
+  async function renderSecTab(pane) {
+    const st = await window.pet.adminStatus();
+    pane.innerHTML = `<div class="sec">🔑 修改 PIN</div>
+      <input id="op" type="password" placeholder="当前 PIN" maxlength="12">
+      <input id="np1" type="password" placeholder="新 PIN（4~12 位）" maxlength="12">
+      <input id="np2" type="password" placeholder="再输入一次" maxlength="12">
+      <button class="btn" id="do-chpin">修改 PIN</button>
+      <div class="sec">🌐 远程卡池地址（留空 = 仅用本地 gacha-pool.json）</div>
+      <input id="pool" type="url" placeholder="https://gist.githubusercontent.com/.../raw/gacha-pool.json" style="user-select:text">
+      <button class="btn" id="do-pool">保存池地址</button>
+      <div class="sec">⬇ 热更通道（当前版本 v${st.hotfixVersion || 0}）</div>
+      <input id="hfurl" type="url" placeholder="https://raw.githubusercontent.com/<user>/remielle-hotfix/main（留空=默认官方仓库）" style="user-select:text">
+      <div class="grid3" style="margin-bottom:12px">
+        <button class="btn mini" id="do-hfurl" style="grid-column:span 2">保存热更地址</button><button class="btn mini alt" id="do-hfnow">立即检查</button>
+      </div>
+      <div class="list" id="hflog"><div class="hint">热更历史加载中…</div></div>
+      <div class="sec">🛠 调试工具（临时解锁 DevTools，仅排查用）</div>
+      <div class="grid3" style="margin-bottom:12px">
+        <button class="btn mini alt" data-dt="pet">本体</button><button class="btn mini alt" data-dt="chat">聊天窗</button><button class="btn mini alt" data-dt="hud">HUD</button>
+      </div>
+      <div class="sec">📜 操作日志（最近 80 条）</div>
+      <div class="list" id="loglist"><div class="hint">加载中…</div></div>`;
+    $('pool').value = st.poolUrl || '';
+    $('do-chpin').addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminChangePin($('op').value, $('np1').value, $('np2').value));
+      if (r2 && r2.ok) renderPanel('✅ PIN 已修改');
+      else if (r2) $('topmsg').innerHTML = msg(r2.error === 'wrong' ? '当前 PIN 不正确' : '两次新 PIN 不一致或长度不合法', false);
+    });
+    $('do-pool').addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminSetPoolUrl($('pool').value.trim()));
+      if (r2 && r2.ok) $('topmsg').innerHTML = msg('✅ 池地址已保存，稍后自动拉取', true);
+      else if (r2) $('topmsg').innerHTML = msg('地址不安全：必须 https 且非内网地址', false);
+    });
+    pane.querySelectorAll('[data-dt]').forEach((b) => b.addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.adminOpenDevTools(b.dataset.dt));
+      if (r2 && r2.ok) $('topmsg').innerHTML = msg('✅ DevTools 已打开（独立窗口）', true);
+    }));
+    // 热更通道接线：地址保存 / 立即检查 / 历史列表（最近 50 条）
+    $('hfurl').value = st.hotfixUrl || '';
+    $('do-hfurl').addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.setHotfixUrl($('hfurl').value.trim()));
+      if (r2 && r2.ok) $('topmsg').innerHTML = msg('✅ 热更地址已保存', true);
+      else if (r2) $('topmsg').innerHTML = msg('地址不安全：必须 https 且域名 raw.githubusercontent.com', false);
+    });
+    $('do-hfnow').addEventListener('click', async () => {
+      const r2 = await guard(() => window.pet.hotfixNow());
+      if (r2 && r2.ok) {
+        $('topmsg').innerHTML = msg('⏳ 已发起热更检查，结果稍后见下方历史', true);
+        setTimeout(async () => {
+          const hl = await guard(() => window.pet.hotfixLog());
+          if (hl && hl.ok) renderHfLog(hl.log);
+        }, 4000);
+      }
+    });
+    const hf = await guard(() => window.pet.hotfixLog());
+    if (hf && hf.ok) renderHfLog(hf.log);
+    const lg = await guard(() => window.pet.adminGetLog());
+    if (lg && lg.ok) {
+      $('loglist').innerHTML = (lg.log || []).length ? lg.log.map((l) =>
+        `<div class="row card"><span class="nm">${esc(l.action)} ${esc(l.detail)}</span><span class="tm">${fmtT(l.at)}</span></div>`).join('')
+        : '<div class="hint">暂无日志。</div>';
+    }
+  }
+
+  // 热更历史列表（时间/版本/结果）
+  function renderHfLog(log) {
+    const el = $('hflog');
+    const entries = (log && log.entries) || [];
+    el.innerHTML = entries.length ? entries.slice(0, 50).map((e2) =>
+      `<div class="row card"><span class="nm">${e2.ok ? '✅' : '❌'} ${esc(e2.reason)}${e2.version ? ' v' + e2.version : ''}${e2.keys ? ' · ' + esc(e2.keys.join(',')) : ''}${e2.detail ? ' · ' + esc(e2.detail) : ''}</span><span class="tm">${fmtT(e2.at)}</span></div>`).join('')
+      : '<div class="hint">暂无热更记录。</div>';
+  }
+
+  // ===== 启动：按 admin.json 状态分流 =====
+  (async () => {
+    const st = await window.pet.adminStatus();
+    if (!st.setup) renderSetup();
+    else if (st.unlocked) renderPanel();
+    else renderVerify();
+  })();
+</script>
+</body>
+</html>
